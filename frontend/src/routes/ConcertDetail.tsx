@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getConcert, listRsvps, setRsvp } from "../api/client";
+import PaymentSection from "../components/PaymentSection";
 
 export default function ConcertDetail() {
   const { id = "" } = useParams();
@@ -22,6 +23,7 @@ export default function ConcertDetail() {
       </div>
       <h2>Wer kommt mit</h2>
       <ul>{rsvps?.map((r) => <li key={r.id}><span>{r.display_name}</span>: {r.status === "yes" ? "✅" : "❌"}</li>)}</ul>
+      <PaymentSection concertId={id} />
     </main>
   );
 }

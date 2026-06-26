@@ -7,7 +7,7 @@ export default function ConcertForm() {
   const { id = "" } = useParams();
   const nav = useNavigate();
   const [f, setF] = useState({ artist: "", event_at: "", rsvp_deadline: "", venue: "", city: "", ticket_url: "", notes: "" });
-  const set = (k: string) => (e: ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const set = (k: string) => (e: ChangeEvent<HTMLInputElement>) => setF((prev) => ({ ...prev, [k]: e.target.value }));
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const payload = {

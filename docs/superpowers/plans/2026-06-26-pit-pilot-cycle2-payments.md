@@ -525,7 +525,9 @@ func (s *PaymentService) Get(ctx context.Context, userID, concertID uuid.UUID) (
 	if err != nil {
 		return PaymentView{}, err
 	}
-	view.Items = []gen.ListPaymentItemsRow{own}
+	// sqlc generates a distinct `GetPaymentItemForUserRow` for the :one query with
+	// fields identical to `ListPaymentItemsRow`; convert so Items stays one slice type.
+	view.Items = []gen.ListPaymentItemsRow{gen.ListPaymentItemsRow(own)}
 	return view, nil
 }
 
@@ -709,7 +711,9 @@ func (s *PaymentService) AddItem(ctx context.Context, userID, concertID, targetU
 		CollectionID: col.ID, UserID: targetUserID, AmountCents: amount}); err != nil {
 		return gen.ListPaymentItemsRow{}, err
 	}
-	return s.q.GetPaymentItemForUser(ctx, gen.GetPaymentItemForUserParams{CollectionID: col.ID, UserID: targetUserID})
+	row, err := s.q.GetPaymentItemForUser(ctx, gen.GetPaymentItemForUserParams{CollectionID: col.ID, UserID: targetUserID})
+	// GetPaymentItemForUser returns gen.GetPaymentItemForUserRow (identical fields); convert.
+	return gen.ListPaymentItemsRow(row), err
 }
 
 func (s *PaymentService) SetAmount(ctx context.Context, userID, concertID, itemID uuid.UUID, amountCents int32) (gen.PaymentItem, error) {

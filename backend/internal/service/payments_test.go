@@ -99,6 +99,20 @@ func TestActivateRejectsNegativeAmount(t *testing.T) {
 	}
 }
 
+func TestSetAmountRejectsNegative(t *testing.T) {
+	ps, gs, q, c, owner := paySetup(t)
+	ctx := context.Background()
+	friend := seedUser(t, q, "friend")
+	g, _ := q.GetGroup(ctx, c.GroupID)
+	_, _ = gs.Join(ctx, friend.ID, g.InviteCode)
+	_, _ = ps.Activate(ctx, owner.ID, c.ID, 4500, nil)
+	row, _ := ps.AddItem(ctx, owner.ID, c.ID, friend.ID, nil)
+	_, err := ps.SetAmount(ctx, owner.ID, c.ID, row.ID, -1)
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 400 {
+		t.Fatalf("expected 400 for negative amount, got %v", err)
+	}
+}
+
 func TestItemManagementResponsibleOnly(t *testing.T) {
 	ps, gs, q, c, owner := paySetup(t)
 	ctx := context.Background()
@@ -112,9 +126,11 @@ func TestItemManagementResponsibleOnly(t *testing.T) {
 	if err != nil || row.AmountCents != 4500 || row.UserID != friend.ID {
 		t.Fatalf("add item: %+v err=%v", row, err)
 	}
-	// adding the same user again conflicts
+	// adding the same user again conflicts (409)
 	if _, err := ps.AddItem(ctx, owner.ID, c.ID, friend.ID, nil); err == nil {
 		t.Fatal("expected conflict adding duplicate item")
+	} else if e, ok := apperr.As(err); !ok || e.HTTPStatus != 409 {
+		t.Fatalf("expected 409 conflict, got %v", err)
 	}
 	// a non-responsible member cannot add
 	if _, err := ps.AddItem(ctx, friend.ID, c.ID, owner.ID, nil); err == nil {
@@ -151,6 +167,14 @@ func TestSetPaymentLink(t *testing.T) {
 	// a non-responsible member cannot set it
 	if _, err := ps.SetPaymentLink(ctx, friend.ID, c.ID, &link); err == nil {
 		t.Fatal("non-responsible must not set the link")
+	}
+	// clearing with nil removes the link
+	if _, err := ps.SetPaymentLink(ctx, owner.ID, c.ID, nil); err != nil {
+		t.Fatalf("clear link: %v", err)
+	}
+	cleared, _ := ps.Get(ctx, friend.ID, c.ID)
+	if cleared.PaymentLink != nil {
+		t.Fatalf("expected link cleared, got %v", cleared.PaymentLink)
 	}
 }
 

@@ -58,6 +58,9 @@ func summarize(items []gen.ListPaymentItemsRow) *PaymentSummary {
 }
 
 func (s *PaymentService) Activate(ctx context.Context, userID, concertID uuid.UUID, defaultCents int32, paymentLink *string) (gen.PaymentCollection, error) {
+	if defaultCents < 0 {
+		return gen.PaymentCollection{}, apperr.BadRequest("invalid_amount", "amount must be non-negative")
+	}
 	if _, err := s.concerts.Get(ctx, userID, concertID); err != nil {
 		return gen.PaymentCollection{}, err
 	}

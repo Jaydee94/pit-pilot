@@ -90,3 +90,11 @@ func TestGetNotActiveIs404(t *testing.T) {
 		t.Fatalf("expected 404, got %v", err)
 	}
 }
+
+func TestActivateRejectsNegativeAmount(t *testing.T) {
+	ps, _, _, c, owner := paySetup(t)
+	_, err := ps.Activate(context.Background(), owner.ID, c.ID, -100, nil)
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 400 {
+		t.Fatalf("expected 400 for negative amount, got %v", err)
+	}
+}

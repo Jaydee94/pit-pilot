@@ -5,53 +5,54 @@
 package gen
 
 import (
+	"time"
+
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Concert struct {
-	ID           uuid.UUID          `json:"id"`
-	GroupID      uuid.UUID          `json:"group_id"`
-	Artist       string             `json:"artist"`
-	EventAt      pgtype.Timestamptz `json:"event_at"`
-	Venue        *string            `json:"venue"`
-	City         *string            `json:"city"`
-	TicketUrl    *string            `json:"ticket_url"`
-	PriceCents   *int32             `json:"price_cents"`
-	Notes        *string            `json:"notes"`
-	RsvpDeadline pgtype.Timestamptz `json:"rsvp_deadline"`
-	CreatedBy    uuid.UUID          `json:"created_by"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	GroupID      uuid.UUID `json:"group_id"`
+	Artist       string    `json:"artist"`
+	EventAt      time.Time `json:"event_at"`
+	Venue        *string   `json:"venue"`
+	City         *string   `json:"city"`
+	TicketUrl    *string   `json:"ticket_url"`
+	PriceCents   *int32    `json:"price_cents"`
+	Notes        *string   `json:"notes"`
+	RsvpDeadline time.Time `json:"rsvp_deadline"`
+	CreatedBy    uuid.UUID `json:"created_by"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type Group struct {
-	ID         uuid.UUID          `json:"id"`
-	Name       string             `json:"name"`
-	InviteCode string             `json:"invite_code"`
-	CreatedBy  uuid.UUID          `json:"created_by"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ID         uuid.UUID `json:"id"`
+	Name       string    `json:"name"`
+	InviteCode string    `json:"invite_code"`
+	CreatedBy  uuid.UUID `json:"created_by"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type GroupMember struct {
-	GroupID  uuid.UUID          `json:"group_id"`
-	UserID   uuid.UUID          `json:"user_id"`
-	Role     string             `json:"role"`
-	JoinedAt pgtype.Timestamptz `json:"joined_at"`
+	GroupID  uuid.UUID `json:"group_id"`
+	UserID   uuid.UUID `json:"user_id"`
+	Role     string    `json:"role"`
+	JoinedAt time.Time `json:"joined_at"`
 }
 
 type Rsvp struct {
-	ConcertID   uuid.UUID          `json:"concert_id"`
-	UserID      uuid.UUID          `json:"user_id"`
-	Status      string             `json:"status"`
-	RespondedAt pgtype.Timestamptz `json:"responded_at"`
+	ConcertID   uuid.UUID `json:"concert_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Status      string    `json:"status"`
+	RespondedAt time.Time `json:"responded_at"`
 }
 
 type User struct {
-	ID          uuid.UUID          `json:"id"`
-	Provider    string             `json:"provider"`
-	ProviderSub string             `json:"provider_sub"`
-	Email       string             `json:"email"`
-	DisplayName string             `json:"display_name"`
-	AvatarUrl   *string            `json:"avatar_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID          uuid.UUID `json:"id"`
+	Provider    string    `json:"provider"`
+	ProviderSub string    `json:"provider_sub"`
+	Email       string    `json:"email"`
+	DisplayName string    `json:"display_name"`
+	AvatarUrl   *string   `json:"avatar_url"`
+	CreatedAt   time.Time `json:"created_at"`
 }

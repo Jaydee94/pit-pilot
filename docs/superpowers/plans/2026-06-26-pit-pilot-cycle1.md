@@ -375,7 +375,11 @@ sql:
         overrides:
           - db_type: "uuid"
             go_type: "github.com/google/uuid.UUID"
+          - db_type: "timestamptz"
+            go_type: "time.Time"
 ```
+
+> Note: the `timestamptz → time.Time` override is required because `sql_package: pgx/v5` otherwise generates `pgtype.Timestamptz`, which the service/handler layers (which use `time.Time`) cannot consume. All `timestamptz` columns in this schema are `NOT NULL`, so the single non-null override is sufficient.
 
 - [ ] **Step 4: Commit**
 

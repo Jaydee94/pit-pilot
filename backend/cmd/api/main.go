@@ -50,12 +50,14 @@ func main() {
 	groups := service.NewGroupService(pool, q, newInviteCode)
 	concerts := service.NewConcertService(q, groups)
 	rsvps := service.NewRSVPService(q, concerts)
+	payments := service.NewPaymentService(pool, q, concerts)
 
 	router := httpapi.NewRouter(httpapi.Deps{
 		Auth:     &httpapi.AuthHandlers{Users: users, Sessions: sessions, CookieSecure: cfg.CookieSecure},
 		Groups:   &httpapi.GroupHandlers{Groups: groups},
 		Concerts: &httpapi.ConcertHandlers{Concerts: concerts},
 		RSVPs:    &httpapi.RSVPHandlers{RSVPs: rsvps},
+		Payments: &httpapi.PaymentHandlers{Payments: payments},
 		GroupSvc: groups,
 		Ready:    func(c context.Context) error { return pool.Ping(c) },
 	})

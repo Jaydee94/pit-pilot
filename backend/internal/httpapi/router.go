@@ -16,6 +16,7 @@ type Deps struct {
 	Groups   *GroupHandlers
 	Concerts *ConcertHandlers
 	RSVPs    *RSVPHandlers
+	Payments *PaymentHandlers
 	GroupSvc *service.GroupService
 	Ready    func(ctx context.Context) error
 }
@@ -86,6 +87,22 @@ func NewRouter(d Deps) http.Handler {
 		if d.RSVPs != nil {
 			api.Put("/concerts/{concertID}/rsvp", d.RSVPs.Set)
 			api.Get("/concerts/{concertID}/rsvps", d.RSVPs.List)
+		}
+
+		if d.Payments != nil {
+			api.Route("/concerts/{concertID}/payments", func(p chi.Router) {
+				p.Post("/", d.Payments.Activate)
+				p.Get("/", d.Payments.Get)
+				p.Patch("/", d.Payments.SetLink)
+				p.Delete("/", d.Payments.Deactivate)
+				p.Post("/items", d.Payments.AddItem)
+				p.Patch("/items/{itemID}", d.Payments.SetAmount)
+				p.Delete("/items/{itemID}", d.Payments.RemoveItem)
+				p.Post("/items/{itemID}/report", d.Payments.Report)
+				p.Delete("/items/{itemID}/report", d.Payments.UnReport)
+				p.Post("/items/{itemID}/confirm", d.Payments.Confirm)
+				p.Delete("/items/{itemID}/confirm", d.Payments.UnConfirm)
+			})
 		}
 	})
 

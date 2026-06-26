@@ -80,7 +80,14 @@ func TestRequireMembershipForbidsNonMember(t *testing.T) {
 	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 403 {
 		t.Fatalf("expected 403, got %v", err)
 	}
-	_ = uuid.Nil
+	// non-member cannot access unknown group
+	if _, err := svc.RequireMembership(context.Background(), owner.ID, uuid.New()); err != nil {
+		if e, ok := apperr.As(err); !ok || e.HTTPStatus != 403 {
+			t.Fatalf("expected 403 for unknown group, got %v", err)
+		}
+	} else {
+		t.Fatal("expected error for unknown group membership")
+	}
 }
 
 func TestRegenerateInviteRequiresAdmin(t *testing.T) {
@@ -97,5 +104,40 @@ func TestRegenerateInviteRequiresAdmin(t *testing.T) {
 	g2, err := svc.RegenerateInvite(ctx, owner.ID, g.ID)
 	if err != nil || g2.InviteCode == g.InviteCode {
 		t.Fatalf("admin regenerate failed: %v err=%v", g2, err)
+	}
+}
+
+func TestJoinIsIdempotent(t *testing.T) {
+	svc, q := newGroupSvc(t)
+	ctx := context.Background()
+	owner := seedUser(t, q, "owner")
+	joiner := seedUser(t, q, "joiner")
+	g, _ := svc.Create(ctx, owner.ID, "Crew")
+	if _, err := svc.Join(ctx, joiner.ID, g.InviteCode); err != nil {
+		t.Fatalf("first join: %v", err)
+	}
+	if _, err := svc.Join(ctx, joiner.ID, g.InviteCode); err != nil {
+		t.Fatalf("re-join should be idempotent, got: %v", err)
+	}
+}
+
+func TestMembersAndListForUser(t *testing.T) {
+	svc, q := newGroupSvc(t)
+	ctx := context.Background()
+	owner := seedUser(t, q, "owner")
+	g, _ := svc.Create(ctx, owner.ID, "Crew")
+
+	groups, err := svc.ListForUser(ctx, owner.ID)
+	if err != nil || len(groups) != 1 || groups[0].ID != g.ID {
+		t.Fatalf("ListForUser: %v err=%v", groups, err)
+	}
+	members, err := svc.Members(ctx, owner.ID, g.ID)
+	if err != nil || len(members) != 1 {
+		t.Fatalf("Members: %v err=%v", members, err)
+	}
+	// non-member cannot list members
+	stranger := seedUser(t, q, "stranger")
+	if _, err := svc.Members(ctx, stranger.ID, g.ID); err == nil {
+		t.Fatal("stranger must not list members")
 	}
 }

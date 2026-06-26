@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jaydee94/pit-pilot/backend/internal/apperr"
+	"github.com/jaydee94/pit-pilot/backend/internal/notify"
 	"github.com/jaydee94/pit-pilot/backend/internal/store/gen"
 )
 
@@ -34,10 +35,21 @@ type PaymentService struct {
 	pool     *pgxpool.Pool
 	q        *gen.Queries
 	concerts *ConcertService
+	enqueuer notify.Enqueuer
 }
 
 func NewPaymentService(pool *pgxpool.Pool, q *gen.Queries, concerts *ConcertService) *PaymentService {
 	return &PaymentService{pool: pool, q: q, concerts: concerts}
+}
+
+func (s *PaymentService) SetEnqueuer(e notify.Enqueuer) { s.enqueuer = e }
+
+// payNotif constructs a payment notification for a user tied to a specific concert.
+func payNotif(userID, concertID uuid.UUID, title, body string) notify.Notification {
+	return notify.Notification{
+		UserID: userID, Type: "payment", Title: title, Body: body,
+		URL: "/concerts/" + concertID.String(),
+	}
 }
 
 func summarize(items []gen.ListPaymentItemsRow) *PaymentSummary {
@@ -94,6 +106,15 @@ func (s *PaymentService) Activate(ctx context.Context, userID, concertID uuid.UU
 		if _, err := qtx.CreatePaymentItem(ctx, gen.CreatePaymentItemParams{
 			CollectionID: col.ID, UserID: uid, AmountCents: defaultCents,
 		}); err != nil {
+			return gen.PaymentCollection{}, err
+		}
+	}
+	if s.enqueuer != nil && len(yes) > 0 {
+		notifs := make([]notify.Notification, 0, len(yes))
+		for _, uid := range yes {
+			notifs = append(notifs, payNotif(uid, concertID, "Bezahlung offen", "Bitte begleiche deinen Ticket-Anteil."))
+		}
+		if err := s.enqueuer.Enqueue(ctx, qtx, notifs); err != nil {
 			return gen.PaymentCollection{}, err
 		}
 	}
@@ -210,9 +231,30 @@ func (s *PaymentService) AddItem(ctx context.Context, userID, concertID, targetU
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return gen.ListPaymentItemsRow{}, err
 	}
-	if _, err := s.q.CreatePaymentItem(ctx, gen.CreatePaymentItemParams{
-		CollectionID: col.ID, UserID: targetUserID, AmountCents: amount}); err != nil {
-		return gen.ListPaymentItemsRow{}, err
+	if s.enqueuer != nil {
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return gen.ListPaymentItemsRow{}, err
+		}
+		defer tx.Rollback(ctx) //nolint:errcheck
+		qtx := s.q.WithTx(tx)
+		if _, err := qtx.CreatePaymentItem(ctx, gen.CreatePaymentItemParams{
+			CollectionID: col.ID, UserID: targetUserID, AmountCents: amount}); err != nil {
+			return gen.ListPaymentItemsRow{}, err
+		}
+		if err := s.enqueuer.Enqueue(ctx, qtx, []notify.Notification{
+			payNotif(targetUserID, concertID, "Bezahlung offen", "Bitte begleiche deinen Ticket-Anteil."),
+		}); err != nil {
+			return gen.ListPaymentItemsRow{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return gen.ListPaymentItemsRow{}, err
+		}
+	} else {
+		if _, err := s.q.CreatePaymentItem(ctx, gen.CreatePaymentItemParams{
+			CollectionID: col.ID, UserID: targetUserID, AmountCents: amount}); err != nil {
+			return gen.ListPaymentItemsRow{}, err
+		}
 	}
 	row, err := s.q.GetPaymentItemForUser(ctx, gen.GetPaymentItemForUserParams{CollectionID: col.ID, UserID: targetUserID})
 	// GetPaymentItemForUser returns gen.GetPaymentItemForUserRow (identical fields); convert.
@@ -304,6 +346,28 @@ func (s *PaymentService) Confirm(ctx context.Context, userID, concertID, itemID 
 		return gen.PaymentItem{}, apperr.BadRequest("invalid_transition", "already confirmed")
 	}
 	now := time.Now()
+	if s.enqueuer != nil {
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return gen.PaymentItem{}, err
+		}
+		defer tx.Rollback(ctx) //nolint:errcheck
+		qtx := s.q.WithTx(tx)
+		updated, err := qtx.UpdatePaymentItemStatus(ctx, gen.UpdatePaymentItemStatusParams{
+			ID: itemID, Status: "confirmed", ReportedAt: item.ReportedAt, ConfirmedAt: &now})
+		if err != nil {
+			return gen.PaymentItem{}, err
+		}
+		if err := s.enqueuer.Enqueue(ctx, qtx, []notify.Notification{
+			payNotif(item.UserID, concertID, "Zahlung bestätigt", "Dein Ticket-Anteil wurde als bezahlt bestätigt."),
+		}); err != nil {
+			return gen.PaymentItem{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return gen.PaymentItem{}, err
+		}
+		return updated, nil
+	}
 	return s.q.UpdatePaymentItemStatus(ctx, gen.UpdatePaymentItemStatusParams{
 		ID: itemID, Status: "confirmed", ReportedAt: item.ReportedAt, ConfirmedAt: &now})
 }

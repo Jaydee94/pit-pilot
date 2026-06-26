@@ -75,7 +75,8 @@ These were settled during brainstorming and drive the design:
    All running in Kubernetes: Ingress → API + Frontend; Secrets for OAuth / DB / signing key
 ```
 
-- **Go API:** a single service (REST/JSON). Router: `chi` (or `gin`). DB access via `pgx` +
+- **Go API:** a single service (REST/JSON). Router: `chi` (decided — close to the standard
+  library, minimal magic). DB access via `pgx` +
   `sqlc` (type-safe queries). Migrations via `golang-migrate`.
 - **Postgres:** in Kubernetes as a StatefulSet with a PVC (dev). A production overlay may point
   at a managed database instead.

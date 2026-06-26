@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jaydee94/pit-pilot/backend/internal/apperr"
 	"github.com/jaydee94/pit-pilot/backend/internal/service"
 	"github.com/jaydee94/pit-pilot/backend/internal/store/gen"
@@ -29,8 +30,9 @@ func TestCreateConcertMemberOnly(t *testing.T) {
 	when := time.Date(2026, 9, 1, 20, 0, 0, 0, time.UTC)
 	in := service.ConcertInput{Artist: "Tool", EventAt: when, RSVPDeadline: when.Add(-72 * time.Hour)}
 
-	if _, err := cs.Create(ctx, stranger.ID, g.ID, in); err == nil {
-		t.Fatal("stranger must not create concert")
+	_, err := cs.Create(ctx, stranger.ID, g.ID, in)
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 403 {
+		t.Fatalf("expected 403 for non-member, got %v", err)
 	}
 	c, err := cs.Create(ctx, owner.ID, g.ID, in)
 	if err != nil || c.Artist != "Tool" {
@@ -59,7 +61,54 @@ func TestGetConcertGatesOnMembership(t *testing.T) {
 	g, _ := gs.Create(ctx, owner.ID, "Crew")
 	when := time.Date(2026, 9, 1, 20, 0, 0, 0, time.UTC)
 	c, _ := cs.Create(ctx, owner.ID, g.ID, service.ConcertInput{Artist: "Tool", EventAt: when, RSVPDeadline: when.Add(-time.Hour)})
-	if _, err := cs.Get(ctx, stranger.ID, c.ID); err == nil {
-		t.Fatal("stranger must not read concert")
+	_, err := cs.Get(ctx, stranger.ID, c.ID)
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 403 {
+		t.Fatalf("expected 403 for non-member, got %v", err)
+	}
+}
+
+func TestListForGroupMemberGated(t *testing.T) {
+	cs, gs, q := newConcertSetup(t)
+	ctx := context.Background()
+	owner := seedUser(t, q, "owner")
+	stranger := seedUser(t, q, "stranger")
+	g, _ := gs.Create(ctx, owner.ID, "Crew")
+	when := time.Date(2026, 9, 1, 20, 0, 0, 0, time.UTC)
+	c, _ := cs.Create(ctx, owner.ID, g.ID, service.ConcertInput{Artist: "Tool", EventAt: when, RSVPDeadline: when.Add(-time.Hour)})
+	list, err := cs.ListForGroup(ctx, owner.ID, g.ID)
+	if err != nil || len(list) != 1 || list[0].ID != c.ID {
+		t.Fatalf("member list: %v err=%v", list, err)
+	}
+	_, err = cs.ListForGroup(ctx, stranger.ID, g.ID)
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 403 {
+		t.Fatalf("expected 403 for non-member, got %v", err)
+	}
+}
+
+func TestCreateConcertValidation(t *testing.T) {
+	cs, gs, q := newConcertSetup(t)
+	ctx := context.Background()
+	owner := seedUser(t, q, "owner")
+	g, _ := gs.Create(ctx, owner.ID, "Crew")
+	when := time.Date(2026, 9, 1, 20, 0, 0, 0, time.UTC)
+
+	// empty artist
+	_, err := cs.Create(ctx, owner.ID, g.ID, service.ConcertInput{EventAt: when, RSVPDeadline: when.Add(-time.Hour)})
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 400 {
+		t.Fatalf("expected 400 for empty artist, got %v", err)
+	}
+	// zero dates
+	_, err = cs.Create(ctx, owner.ID, g.ID, service.ConcertInput{Artist: "Tool"})
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 400 {
+		t.Fatalf("expected 400 for zero dates, got %v", err)
+	}
+}
+
+func TestGetConcertNotFound(t *testing.T) {
+	cs, _, q := newConcertSetup(t)
+	owner := seedUser(t, q, "owner")
+	_, err := cs.Get(context.Background(), owner.ID, uuid.New())
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 404 {
+		t.Fatalf("expected 404 for missing concert, got %v", err)
 	}
 }

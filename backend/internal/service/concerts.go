@@ -8,7 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jaydee94/pit-pilot/backend/internal/apperr"
+	"github.com/jaydee94/pit-pilot/backend/internal/notify"
 	"github.com/jaydee94/pit-pilot/backend/internal/store/gen"
 )
 
@@ -24,12 +26,19 @@ type ConcertInput struct {
 }
 
 type ConcertService struct {
-	q      *gen.Queries
-	groups *GroupService
+	q        *gen.Queries
+	groups   *GroupService
+	enqueuer notify.Enqueuer
+	pool     *pgxpool.Pool
 }
 
 func NewConcertService(q *gen.Queries, groups *GroupService) *ConcertService {
 	return &ConcertService{q: q, groups: groups}
+}
+
+func (s *ConcertService) SetEnqueuer(e notify.Enqueuer, pool *pgxpool.Pool) {
+	s.enqueuer = e
+	s.pool = pool
 }
 
 func strPtr(s string) *string {
@@ -52,12 +61,48 @@ func (s *ConcertService) Create(ctx context.Context, userID, groupID uuid.UUID, 
 	if in.RSVPDeadline.After(in.EventAt) {
 		return gen.Concert{}, apperr.BadRequest("deadline_after_event", "rsvp deadline must be before the event")
 	}
-	return s.q.CreateConcert(ctx, gen.CreateConcertParams{
+	params := gen.CreateConcertParams{
 		GroupID: groupID, Artist: in.Artist, EventAt: in.EventAt,
 		Venue: strPtr(in.Venue), City: strPtr(in.City), TicketUrl: strPtr(in.TicketURL),
 		PriceCents: in.PriceCents, Notes: strPtr(in.Notes),
 		RsvpDeadline: in.RSVPDeadline, CreatedBy: userID,
-	})
+	}
+	if s.enqueuer == nil {
+		return s.q.CreateConcert(ctx, params)
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return gen.Concert{}, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	qtx := s.q.WithTx(tx)
+	c, err := qtx.CreateConcert(ctx, params)
+	if err != nil {
+		return gen.Concert{}, err
+	}
+	members, err := qtx.ListGroupMembers(ctx, groupID)
+	if err != nil {
+		return gen.Concert{}, err
+	}
+	var rows []notify.Notification
+	for _, m := range members {
+		if m.ID == userID {
+			continue
+		}
+		rows = append(rows, notify.Notification{
+			UserID: m.ID, Type: "concert_new",
+			Title: "Neues Konzert: " + c.Artist,
+			Body:  c.Artist + " wurde in deiner Gruppe eingeplant.",
+			URL:   "/concerts/" + c.ID.String(),
+		})
+	}
+	if err := s.enqueuer.Enqueue(ctx, qtx, rows); err != nil {
+		return gen.Concert{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return gen.Concert{}, err
+	}
+	return c, nil
 }
 
 func (s *ConcertService) ListForGroup(ctx context.Context, userID, groupID uuid.UUID) ([]gen.Concert, error) {

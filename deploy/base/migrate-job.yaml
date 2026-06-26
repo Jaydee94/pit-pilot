@@ -1,3 +1,6 @@
+# NOTE: This Job runs concurrently with the API Deployment on `kubectl apply -k`.
+# The API may crash-loop briefly until migrations complete; readiness probes keep
+# traffic away until it's healthy. For strict ordering, add an initContainer to api.yaml.
 apiVersion: batch/v1
 kind: Job
 metadata: { name: db-migrate }

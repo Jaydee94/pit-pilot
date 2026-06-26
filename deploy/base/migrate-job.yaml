@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata: { name: db-migrate }
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: migrate/migrate:v4.17.1
+          envFrom: [{ secretRef: { name: pitpilot-secrets } }]
+          command: ["migrate"]
+          args:
+            - "-path=/migrations"
+            - "-database=$(DATABASE_URL)"
+            - "up"
+          volumeMounts: [{ name: migrations, mountPath: /migrations }]
+      volumes:
+        - name: migrations
+          configMap: { name: pitpilot-migrations }

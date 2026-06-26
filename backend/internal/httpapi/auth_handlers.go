@@ -39,7 +39,7 @@ func (a *AuthHandlers) Login(provider string) http.HandlerFunc {
 		http.SetCookie(w, &http.Cookie{
 			Name: "pp_session", Value: token, Path: "/",
 			HttpOnly: true, Secure: a.CookieSecure, SameSite: http.SameSiteLaxMode,
-			Expires: time.Now().Add(30 * 24 * time.Hour),
+			Expires: time.Now().Add(30 * 24 * time.Hour), MaxAge: 30 * 24 * 60 * 60,
 		})
 		WriteJSON(w, http.StatusOK, map[string]any{
 			"id": user.ID, "display_name": user.DisplayName, "avatar_url": user.AvatarUrl,

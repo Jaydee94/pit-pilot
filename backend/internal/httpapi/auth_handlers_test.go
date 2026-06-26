@@ -37,8 +37,11 @@ func TestLoginSetsCookie(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Header().Get("Set-Cookie"), "pp_session=") {
-		t.Fatalf("expected session cookie, got %q", rec.Header().Get("Set-Cookie"))
+	raw := rec.Header().Get("Set-Cookie")
+	for _, want := range []string{"pp_session=", "HttpOnly", "SameSite=Lax"} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("Set-Cookie missing %q; got %q", want, raw)
+		}
 	}
 }
 

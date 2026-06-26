@@ -33,3 +33,45 @@ func TestSubscribeAndVapidKey(t *testing.T) {
 		t.Fatalf("subscribe: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestUnsubscribe(t *testing.T) {
+	q := gen.New(testutil.NewPostgres(t))
+	h := &httpapi.PushHandlers{Subs: service.NewSubscriptionService(q), VapidPublicKey: "PUBKEY"}
+
+	u, _ := q.UpsertUser(httptest.NewRequest(http.MethodGet, "/", nil).Context(),
+		gen.UpsertUserParams{Provider: "google", ProviderSub: "u2", DisplayName: "U2"})
+
+	// Subscribe first
+	subscribeBody := `{"endpoint":"https://push/unsub-test","keys":{"p256dh":"k","auth":"a"}}`
+	subscribeReq := httpapi.WithUserIDForTest(httptest.NewRequest(http.MethodPost, "/api/push/subscriptions", strings.NewReader(subscribeBody)), u.ID)
+	subscribeRec := httptest.NewRecorder()
+	h.Subscribe(subscribeRec, subscribeReq)
+	if subscribeRec.Code != http.StatusCreated {
+		t.Fatalf("subscribe setup failed: %d %s", subscribeRec.Code, subscribeRec.Body.String())
+	}
+
+	// Unsubscribe
+	unsubscribeBody := `{"endpoint":"https://push/unsub-test"}`
+	unsubscribeReq := httpapi.WithUserIDForTest(httptest.NewRequest(http.MethodPost, "/api/push/unsubscriptions", strings.NewReader(unsubscribeBody)), u.ID)
+	unsubscribeRec := httptest.NewRecorder()
+	h.Unsubscribe(unsubscribeRec, unsubscribeReq)
+	if unsubscribeRec.Code != http.StatusNoContent {
+		t.Fatalf("unsubscribe: %d %s", unsubscribeRec.Code, unsubscribeRec.Body.String())
+	}
+}
+
+func TestSubscribeRejectsBadBody(t *testing.T) {
+	q := gen.New(testutil.NewPostgres(t))
+	h := &httpapi.PushHandlers{Subs: service.NewSubscriptionService(q), VapidPublicKey: "PUBKEY"}
+
+	u, _ := q.UpsertUser(httptest.NewRequest(http.MethodGet, "/", nil).Context(),
+		gen.UpsertUserParams{Provider: "google", ProviderSub: "u3", DisplayName: "U3"})
+
+	// Subscribe with invalid JSON
+	req := httpapi.WithUserIDForTest(httptest.NewRequest(http.MethodPost, "/api/push/subscriptions", strings.NewReader("not json")), u.ID)
+	rec := httptest.NewRecorder()
+	h.Subscribe(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("subscribe bad body: expected %d, got %d %s", http.StatusBadRequest, rec.Code, rec.Body.String())
+	}
+}

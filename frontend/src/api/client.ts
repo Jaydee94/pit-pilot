@@ -37,6 +37,7 @@ export const createGroup = (name: string) =>
   apiFetch<Group>("/api/groups", { method: "POST", body: JSON.stringify({ name }) });
 export const joinGroup = (code: string) =>
   apiFetch<Group>("/api/groups/join", { method: "POST", body: JSON.stringify({ code }) });
+export const getGroup = (id: string) => apiFetch<Group>(`/api/groups/${id}`);
 export const groupMembers = (id: string) => apiFetch<Member[]>(`/api/groups/${id}/members`);
 export const regenerateInvite = (id: string) =>
   apiFetch<{ invite_code: string }>(`/api/groups/${id}/invite`, { method: "POST" });

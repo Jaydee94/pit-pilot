@@ -15,9 +15,6 @@ type GroupHandlers struct {
 	Groups *service.GroupService
 }
 
-// WithUserIDForTest injects a user id into the request context (test helper).
-func WithUserIDForTest(r *http.Request, id uuid.UUID) *http.Request { return withUserID(r, id) }
-
 func (h *GroupHandlers) Create(w http.ResponseWriter, r *http.Request) {
 	uid, _ := UserID(r)
 	var body struct {

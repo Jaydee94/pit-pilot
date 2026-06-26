@@ -11,3 +11,5 @@ configMapGenerator:
     files:
       - migrations/0001_init.up.sql
       - migrations/0001_init.down.sql
+      - migrations/0002_payments.up.sql
+      - migrations/0002_payments.down.sql

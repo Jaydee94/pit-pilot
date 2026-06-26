@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,7 @@ type Deps struct {
 	Concerts *ConcertHandlers
 	RSVPs    *RSVPHandlers
 	GroupSvc *service.GroupService
+	Ready    func(ctx context.Context) error
 }
 
 func NewRouter(d Deps) http.Handler {
@@ -23,7 +25,17 @@ func NewRouter(d Deps) http.Handler {
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	r.Get("/readyz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if d.Ready != nil {
+			if err := d.Ready(r.Context()); err != nil {
+				WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
+					"error": map[string]string{"code": "not_ready", "message": "database unavailable"},
+				})
+				return
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 
 	if d.Auth != nil {
 		r.Post("/auth/google", d.Auth.Login("google"))
@@ -56,6 +68,7 @@ func NewRouter(d Deps) http.Handler {
 			api.Route("/groups/{groupID}", func(gr chi.Router) {
 				gr.Use(RequireGroupMember(d.GroupSvc))
 				if d.Groups != nil {
+					gr.Get("/", d.Groups.Get)
 					gr.Get("/members", d.Groups.Members)
 					gr.Post("/invite", d.Groups.Invite)
 				}

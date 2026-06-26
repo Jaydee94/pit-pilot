@@ -35,6 +35,9 @@ func main() {
 		log.Fatalf("db: %v", err)
 	}
 	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("db ping: %v", err)
+	}
 	q := gen.New(pool)
 
 	verifier, err := auth.NewOIDCVerifier(ctx, cfg.GoogleClientID, cfg.AppleClientID)
@@ -54,10 +57,19 @@ func main() {
 		Concerts: &httpapi.ConcertHandlers{Concerts: concerts},
 		RSVPs:    &httpapi.RSVPHandlers{RSVPs: rsvps},
 		GroupSvc: groups,
+		Ready:    func(c context.Context) error { return pool.Ping(c) },
 	})
 
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	log.Printf("pit-pilot api listening on :%s", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, router); err != nil {
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

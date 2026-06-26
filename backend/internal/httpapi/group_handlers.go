@@ -88,3 +88,18 @@ func (h *GroupHandlers) Invite(w http.ResponseWriter, r *http.Request) {
 	}
 	WriteJSON(w, http.StatusOK, map[string]string{"invite_code": g.InviteCode})
 }
+
+func (h *GroupHandlers) Get(w http.ResponseWriter, r *http.Request) {
+	uid, _ := UserID(r)
+	gid, err := uuid.Parse(chi.URLParam(r, "groupID"))
+	if err != nil {
+		WriteError(w, apperr.BadRequest("invalid_id", "bad group id"))
+		return
+	}
+	g, err := h.Groups.Get(r.Context(), uid, gid)
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, g)
+}

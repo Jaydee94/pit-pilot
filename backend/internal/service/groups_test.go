@@ -107,6 +107,33 @@ func TestRegenerateInviteRequiresAdmin(t *testing.T) {
 	}
 }
 
+
+func TestGroupServiceGet(t *testing.T) {
+	svc, q := newGroupSvc(t)
+	ctx := context.Background()
+	owner := seedUser(t, q, "owner-get")
+	stranger := seedUser(t, q, "stranger-get")
+	g, err := svc.Create(ctx, owner.ID, "GetGroup")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// member gets the group
+	got, err := svc.Get(ctx, owner.ID, g.ID)
+	if err != nil {
+		t.Fatalf("Get: unexpected error: %v", err)
+	}
+	if got.ID != g.ID {
+		t.Fatalf("Get: returned wrong group id: %v", got.ID)
+	}
+
+	// non-member gets 403
+	_, err = svc.Get(ctx, stranger.ID, g.ID)
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 403 {
+		t.Fatalf("Get: expected 403 for non-member, got %v", err)
+	}
+}
+
 func TestJoinIsIdempotent(t *testing.T) {
 	svc, q := newGroupSvc(t)
 	ctx := context.Background()

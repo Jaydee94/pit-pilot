@@ -47,6 +47,17 @@ func (s *GroupService) Create(ctx context.Context, userID uuid.UUID, name string
 	return g, nil
 }
 
+
+func (s *GroupService) Get(ctx context.Context, userID, groupID uuid.UUID) (gen.Group, error) {
+	if _, err := s.RequireMembership(ctx, userID, groupID); err != nil {
+		return gen.Group{}, err
+	}
+	g, err := s.q.GetGroup(ctx, groupID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return gen.Group{}, apperr.NotFound("group_not_found", "group not found")
+	}
+	return g, err
+}
 func (s *GroupService) ListForUser(ctx context.Context, userID uuid.UUID) ([]gen.Group, error) {
 	return s.q.ListGroupsForUser(ctx, userID)
 }

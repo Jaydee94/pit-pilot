@@ -108,3 +108,52 @@ func TestRequireGroupMember(t *testing.T) {
 		t.Errorf("200 case: got %d, want 200 (body: %s)", rec.Code, rec.Body.String())
 	}
 }
+
+func TestGetGroupHandler(t *testing.T) {
+	pool := testutil.NewPostgres(t)
+	q := gen.New(pool)
+	codes := []string{"INV001", "INV002"}
+	i := 0
+	gs := service.NewGroupService(pool, q, func() string { c := codes[i%len(codes)]; i++; return c })
+	h := &httpapi.GroupHandlers{Groups: gs}
+
+	ctx := context.Background()
+	owner, err := q.UpsertUser(ctx, gen.UpsertUserParams{Provider: "google", ProviderSub: "owner-get-h", DisplayName: "Owner"})
+	if err != nil {
+		t.Fatalf("upsert owner: %v", err)
+	}
+	nonMember, err := q.UpsertUser(ctx, gen.UpsertUserParams{Provider: "google", ProviderSub: "stranger-get-h", DisplayName: "Stranger"})
+	if err != nil {
+		t.Fatalf("upsert non-member: %v", err)
+	}
+	g, err := gs.Create(ctx, owner.ID, "TestGetGroup")
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+
+	buildReq := func(userID uuid.UUID) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "/groups/"+g.ID.String(), nil)
+		req = httpapi.WithUserIDForTest(req, userID)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("groupID", g.ID.String())
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		return req
+	}
+
+	// owner gets 200 with invite_code in body
+	rec := httptest.NewRecorder()
+	h.Get(rec, buildReq(owner.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("owner Get: got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "invite_code") {
+		t.Fatalf("owner Get: response missing invite_code field: %s", rec.Body.String())
+	}
+
+	// non-member gets 403
+	rec = httptest.NewRecorder()
+	h.Get(rec, buildReq(nonMember.ID))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-member Get: got %d, want 403 body=%s", rec.Code, rec.Body.String())
+	}
+}

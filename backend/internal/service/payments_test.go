@@ -98,3 +98,77 @@ func TestActivateRejectsNegativeAmount(t *testing.T) {
 		t.Fatalf("expected 400 for negative amount, got %v", err)
 	}
 }
+
+func TestItemManagementResponsibleOnly(t *testing.T) {
+	ps, gs, q, c, owner := paySetup(t)
+	ctx := context.Background()
+	friend := seedUser(t, q, "friend")
+	g, _ := q.GetGroup(ctx, c.GroupID)
+	_, _ = gs.Join(ctx, friend.ID, g.InviteCode)
+	_, _ = ps.Activate(ctx, owner.ID, c.ID, 4500, nil) // no yes-rsvps yet → empty list
+
+	// responsible adds an item for friend at default
+	row, err := ps.AddItem(ctx, owner.ID, c.ID, friend.ID, nil)
+	if err != nil || row.AmountCents != 4500 || row.UserID != friend.ID {
+		t.Fatalf("add item: %+v err=%v", row, err)
+	}
+	// adding the same user again conflicts
+	if _, err := ps.AddItem(ctx, owner.ID, c.ID, friend.ID, nil); err == nil {
+		t.Fatal("expected conflict adding duplicate item")
+	}
+	// a non-responsible member cannot add
+	if _, err := ps.AddItem(ctx, friend.ID, c.ID, owner.ID, nil); err == nil {
+		t.Fatal("non-responsible must not add items")
+	}
+	// set amount + remove
+	upd, err := ps.SetAmount(ctx, owner.ID, c.ID, row.ID, 3000)
+	if err != nil || upd.AmountCents != 3000 {
+		t.Fatalf("set amount: %+v err=%v", upd, err)
+	}
+	if err := ps.RemoveItem(ctx, owner.ID, c.ID, row.ID); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+}
+
+func TestSetPaymentLink(t *testing.T) {
+	ps, gs, q, c, owner := paySetup(t)
+	ctx := context.Background()
+	friend := seedUser(t, q, "friend")
+	g, _ := q.GetGroup(ctx, c.GroupID)
+	_, _ = gs.Join(ctx, friend.ID, g.InviteCode)
+	_, _ = q.UpsertRSVP(ctx, gen.UpsertRSVPParams{ConcertID: c.ID, UserID: friend.ID, Status: "yes"})
+	_, _ = ps.Activate(ctx, owner.ID, c.ID, 4500, nil)
+
+	link := "https://paypal.me/owner/45"
+	if _, err := ps.SetPaymentLink(ctx, owner.ID, c.ID, &link); err != nil {
+		t.Fatalf("set link: %v", err)
+	}
+	// the owing member sees the link on their view
+	view, err := ps.Get(ctx, friend.ID, c.ID)
+	if err != nil || view.PaymentLink == nil || *view.PaymentLink != link {
+		t.Fatalf("member should see link: %+v err=%v", view.PaymentLink, err)
+	}
+	// a non-responsible member cannot set it
+	if _, err := ps.SetPaymentLink(ctx, friend.ID, c.ID, &link); err == nil {
+		t.Fatal("non-responsible must not set the link")
+	}
+}
+
+func TestDeactivateResponsibleOnly(t *testing.T) {
+	ps, gs, q, c, owner := paySetup(t)
+	ctx := context.Background()
+	friend := seedUser(t, q, "friend")
+	g, _ := q.GetGroup(ctx, c.GroupID)
+	_, _ = gs.Join(ctx, friend.ID, g.InviteCode)
+	_, _ = ps.Activate(ctx, owner.ID, c.ID, 4500, nil)
+
+	if err := ps.Deactivate(ctx, friend.ID, c.ID); err == nil {
+		t.Fatal("non-responsible must not deactivate")
+	}
+	if err := ps.Deactivate(ctx, owner.ID, c.ID); err != nil {
+		t.Fatalf("deactivate: %v", err)
+	}
+	if _, err := ps.Get(ctx, owner.ID, c.ID); err == nil {
+		t.Fatal("expected 404 after deactivate")
+	}
+}

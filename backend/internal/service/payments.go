@@ -183,3 +183,71 @@ func (s *PaymentService) loadItem(ctx context.Context, userID, concertID, itemID
 	}
 	return col, item, nil
 }
+
+func (s *PaymentService) AddItem(ctx context.Context, userID, concertID, targetUserID uuid.UUID, amountCents *int32) (gen.ListPaymentItemsRow, error) {
+	col, err := s.requireResponsible(ctx, userID, concertID)
+	if err != nil {
+		return gen.ListPaymentItemsRow{}, err
+	}
+	amount := col.DefaultAmountCents
+	if amountCents != nil {
+		amount = *amountCents
+	}
+	if _, err := s.q.GetPaymentItemForUser(ctx, gen.GetPaymentItemForUserParams{CollectionID: col.ID, UserID: targetUserID}); err == nil {
+		return gen.ListPaymentItemsRow{}, apperr.Conflict("item_exists", "this person already has a payment item")
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return gen.ListPaymentItemsRow{}, err
+	}
+	if _, err := s.q.CreatePaymentItem(ctx, gen.CreatePaymentItemParams{
+		CollectionID: col.ID, UserID: targetUserID, AmountCents: amount}); err != nil {
+		return gen.ListPaymentItemsRow{}, err
+	}
+	row, err := s.q.GetPaymentItemForUser(ctx, gen.GetPaymentItemForUserParams{CollectionID: col.ID, UserID: targetUserID})
+	// GetPaymentItemForUser returns gen.GetPaymentItemForUserRow (identical fields); convert.
+	return gen.ListPaymentItemsRow(row), err
+}
+
+func (s *PaymentService) SetAmount(ctx context.Context, userID, concertID, itemID uuid.UUID, amountCents int32) (gen.PaymentItem, error) {
+	if _, _, err := s.loadItemAsResponsible(ctx, userID, concertID, itemID); err != nil {
+		return gen.PaymentItem{}, err
+	}
+	if amountCents < 0 {
+		return gen.PaymentItem{}, apperr.BadRequest("invalid_amount", "amount must be non-negative")
+	}
+	return s.q.UpdatePaymentItemAmount(ctx, gen.UpdatePaymentItemAmountParams{ID: itemID, AmountCents: amountCents})
+}
+
+func (s *PaymentService) RemoveItem(ctx context.Context, userID, concertID, itemID uuid.UUID) error {
+	if _, _, err := s.loadItemAsResponsible(ctx, userID, concertID, itemID); err != nil {
+		return err
+	}
+	return s.q.DeletePaymentItem(ctx, itemID)
+}
+
+func (s *PaymentService) Deactivate(ctx context.Context, userID, concertID uuid.UUID) error {
+	col, err := s.requireResponsible(ctx, userID, concertID)
+	if err != nil {
+		return err
+	}
+	return s.q.DeletePaymentCollection(ctx, col.ID)
+}
+
+func (s *PaymentService) SetPaymentLink(ctx context.Context, userID, concertID uuid.UUID, link *string) (gen.PaymentCollection, error) {
+	col, err := s.requireResponsible(ctx, userID, concertID)
+	if err != nil {
+		return gen.PaymentCollection{}, err
+	}
+	return s.q.UpdatePaymentCollectionLink(ctx, gen.UpdatePaymentCollectionLinkParams{ID: col.ID, PaymentLink: link})
+}
+
+// loadItemAsResponsible loads an item and verifies the caller is the collection's responsible user.
+func (s *PaymentService) loadItemAsResponsible(ctx context.Context, userID, concertID, itemID uuid.UUID) (gen.PaymentCollection, gen.PaymentItem, error) {
+	col, item, err := s.loadItem(ctx, userID, concertID, itemID)
+	if err != nil {
+		return gen.PaymentCollection{}, gen.PaymentItem{}, err
+	}
+	if col.ResponsibleUserID != userID {
+		return gen.PaymentCollection{}, gen.PaymentItem{}, apperr.Forbidden("not_responsible", "only the ticket organizer can do this")
+	}
+	return col, item, nil
+}

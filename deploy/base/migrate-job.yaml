@@ -1,0 +1,24 @@
+# NOTE: This Job runs concurrently with the API Deployment on `kubectl apply -k`.
+# The API may crash-loop briefly until migrations complete; readiness probes keep
+# traffic away until it's healthy. For strict ordering, add an initContainer to api.yaml.
+apiVersion: batch/v1
+kind: Job
+metadata: { name: db-migrate }
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: migrate/migrate:v4.17.1
+          envFrom: [{ secretRef: { name: pitpilot-secrets } }]
+          command: ["migrate"]
+          args:
+            - "-path=/migrations"
+            - "-database=$(DATABASE_URL)"
+            - "up"
+          volumeMounts: [{ name: migrations, mountPath: /migrations }]
+      volumes:
+        - name: migrations
+          configMap: { name: pitpilot-migrations }

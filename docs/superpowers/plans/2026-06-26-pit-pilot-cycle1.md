@@ -6,11 +6,12 @@
 
 **Architecture:** A single Go REST service in three layers (HTTP handlers → service/domain → sqlc store), backed by Postgres. Auth verifies a provider OIDC ID token, then issues its own session JWT in an httpOnly cookie. A React+Vite PWA consumes the API. Everything ships as containers with Kustomize manifests for Kubernetes.
 
-**Tech Stack:** Go 1.23, `chi` v5 router, `pgx` v5 + `sqlc`, `golang-migrate`, `golang-jwt/jwt` v5, `coreos/go-oidc` v3, `testcontainers-go`; React 18 + Vite + TypeScript + TanStack Query + Vitest; Docker (distroless / nginx), Kustomize, kind.
+**Tech Stack:** Go 1.26, `chi` v5 router, `pgx` v5 + `sqlc`, `golang-migrate`, `golang-jwt/jwt` v5, `coreos/go-oidc` v3, `testcontainers-go`; React 18 + Vite + TypeScript + TanStack Query + Vitest; Docker (distroless / nginx), Kustomize, kind.
 
 ## Global Constraints
 
-- Go module path: `github.com/jaydee94/pit-pilot/backend`; Go version floor `1.23`.
+- Go module path: `github.com/jaydee94/pit-pilot/backend`; Go version floor `1.26` (use the latest Go; local toolchain is 1.26.4).
+- **Always use the latest stable version of every library, tool, and base image.** Any version number shown in this plan (Go module versions, `npm` dependency ranges, `sqlc@…`, Docker image tags) is illustrative only — at implementation time fetch the current latest: `go get <module>@latest`, `npm install <pkg>@latest`, `sqlc@latest`, and the newest stable Docker base-image tags. After pulling, run the tests; if a latest version introduces a breaking change, fix forward to the new API (do not pin to an older version to avoid the work) — and note it in the task report.
 - Strict TDD on every unit: write the failing test first, watch it fail, implement minimally, watch it pass, commit. No implementation code without a failing test first.
 - Primary keys are UUIDs. Money is stored as integer **cents**, never floats.
 - RSVP status is exactly `'yes'` or `'no'`. Group role is exactly `'admin'` or `'member'`. Provider is exactly `'google'` or `'apple'`.
@@ -374,7 +375,11 @@ sql:
         overrides:
           - db_type: "uuid"
             go_type: "github.com/google/uuid.UUID"
+          - db_type: "timestamptz"
+            go_type: "time.Time"
 ```
+
+> Note: the `timestamptz → time.Time` override is required because `sql_package: pgx/v5` otherwise generates `pgtype.Timestamptz`, which the service/handler layers (which use `time.Time`) cannot consume. All `timestamptz` columns in this schema are `NOT NULL`, so the single non-null override is sufficient.
 
 - [ ] **Step 4: Commit**
 
@@ -552,7 +557,7 @@ SELECT * FROM users WHERE id = $1;
 
 Install sqlc if needed, then generate:
 ```bash
-cd backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0 generate
+cd backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest generate
 ```
 Then write a test that exercises generated code:
 ```go
@@ -1573,7 +1578,7 @@ UPDATE groups SET invite_code = $2 WHERE id = $1 RETURNING *;
 - [ ] **Step 2: Regenerate**
 
 ```bash
-cd backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0 generate
+cd backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest generate
 ```
 
 - [ ] **Step 3: Write the failing test**
@@ -2128,7 +2133,7 @@ SELECT * FROM concerts WHERE id = $1;
 - [ ] **Step 2: Regenerate**
 
 ```bash
-cd backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0 generate
+cd backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest generate
 ```
 
 - [ ] **Step 3: Write the failing test**
@@ -2587,7 +2592,7 @@ ORDER BY u.display_name;
 - [ ] **Step 2: Regenerate**
 
 ```bash
-cd backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0 generate
+cd backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest generate
 ```
 
 - [ ] **Step 3: Write the failing test**
@@ -3740,7 +3745,7 @@ git add frontend && git commit -m "feat: auth gate, router, and the five core sc
 
 ```dockerfile
 # backend/Dockerfile
-FROM golang:1.23 AS build
+FROM golang:1.26 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

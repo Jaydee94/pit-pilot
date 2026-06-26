@@ -40,6 +40,26 @@ type GroupMember struct {
 	JoinedAt time.Time `json:"joined_at"`
 }
 
+type PaymentCollection struct {
+	ID                 uuid.UUID `json:"id"`
+	ConcertID          uuid.UUID `json:"concert_id"`
+	ResponsibleUserID  uuid.UUID `json:"responsible_user_id"`
+	DefaultAmountCents int32     `json:"default_amount_cents"`
+	PaymentLink        *string   `json:"payment_link"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+type PaymentItem struct {
+	ID           uuid.UUID  `json:"id"`
+	CollectionID uuid.UUID  `json:"collection_id"`
+	UserID       uuid.UUID  `json:"user_id"`
+	AmountCents  int32      `json:"amount_cents"`
+	Status       string     `json:"status"`
+	ReportedAt   *time.Time `json:"reported_at"`
+	ConfirmedAt  *time.Time `json:"confirmed_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
 type Rsvp struct {
 	ConcertID   uuid.UUID `json:"concert_id"`
 	UserID      uuid.UUID `json:"user_id"`

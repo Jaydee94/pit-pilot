@@ -196,3 +196,74 @@ func TestDeactivateResponsibleOnly(t *testing.T) {
 		t.Fatal("expected 404 after deactivate")
 	}
 }
+
+func paySetupWithItem(t *testing.T) (*service.PaymentService, *gen.Queries, gen.Concert, gen.User, gen.User, gen.ListPaymentItemsRow) {
+	ps, gs, q, c, owner := paySetup(t)
+	ctx := context.Background()
+	friend := seedUser(t, q, "friend")
+	g, _ := q.GetGroup(ctx, c.GroupID)
+	_, _ = gs.Join(ctx, friend.ID, g.InviteCode)
+	_, _ = q.UpsertRSVP(ctx, gen.UpsertRSVPParams{ConcertID: c.ID, UserID: friend.ID, Status: "yes"})
+	_, _ = ps.Activate(ctx, owner.ID, c.ID, 4500, nil)
+	view, _ := ps.Get(ctx, owner.ID, c.ID)
+	return ps, q, c, owner, friend, view.Items[0] // friend's item
+}
+
+func TestReportConfirmRoundTrip(t *testing.T) {
+	ps, _, c, owner, friend, item := paySetupWithItem(t)
+	ctx := context.Background()
+
+	// owner (not the item owner) cannot report friend's item
+	if _, err := ps.Report(ctx, owner.ID, c.ID, item.ID); err == nil {
+		t.Fatal("non-owner must not report")
+	}
+	// friend reports their own item
+	r, err := ps.Report(ctx, friend.ID, c.ID, item.ID)
+	if err != nil || r.Status != "reported" || r.ReportedAt == nil {
+		t.Fatalf("report: %+v err=%v", r, err)
+	}
+	// friend cannot confirm (only responsible)
+	if _, err := ps.Confirm(ctx, friend.ID, c.ID, item.ID); err == nil {
+		t.Fatal("non-responsible must not confirm")
+	}
+	// owner (responsible) confirms
+	cf, err := ps.Confirm(ctx, owner.ID, c.ID, item.ID)
+	if err != nil || cf.Status != "confirmed" || cf.ConfirmedAt == nil {
+		t.Fatalf("confirm: %+v err=%v", cf, err)
+	}
+	// owner un-confirms → back to reported (reported_at was set)
+	uc, err := ps.UnConfirm(ctx, owner.ID, c.ID, item.ID)
+	if err != nil || uc.Status != "reported" || uc.ConfirmedAt != nil {
+		t.Fatalf("unconfirm: %+v err=%v", uc, err)
+	}
+	// friend un-reports → open
+	ur, err := ps.UnReport(ctx, friend.ID, c.ID, item.ID)
+	if err != nil || ur.Status != "open" || ur.ReportedAt != nil {
+		t.Fatalf("unreport: %+v err=%v", ur, err)
+	}
+}
+
+func TestInvalidTransitionIsBadRequest(t *testing.T) {
+	ps, _, c, _, friend, item := paySetupWithItem(t)
+	ctx := context.Background()
+	// un-report on an open item is invalid
+	_, err := ps.UnReport(ctx, friend.ID, c.ID, item.ID)
+	if e, ok := apperr.As(err); !ok || e.HTTPStatus != 400 {
+		t.Fatalf("expected 400 invalid transition, got %v", err)
+	}
+}
+
+func TestDirectConfirmFromOpen(t *testing.T) {
+	ps, _, c, owner, _, item := paySetupWithItem(t)
+	ctx := context.Background()
+	// responsible confirms an open item directly (cash in hand)
+	cf, err := ps.Confirm(ctx, owner.ID, c.ID, item.ID)
+	if err != nil || cf.Status != "confirmed" {
+		t.Fatalf("direct confirm: %+v err=%v", cf, err)
+	}
+	// un-confirm → open (no reported_at)
+	uc, err := ps.UnConfirm(ctx, owner.ID, c.ID, item.ID)
+	if err != nil || uc.Status != "open" {
+		t.Fatalf("unconfirm to open: %+v err=%v", uc, err)
+	}
+}

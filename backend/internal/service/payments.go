@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -250,4 +251,64 @@ func (s *PaymentService) loadItemAsResponsible(ctx context.Context, userID, conc
 		return gen.PaymentCollection{}, gen.PaymentItem{}, apperr.Forbidden("not_responsible", "only the ticket organizer can do this")
 	}
 	return col, item, nil
+}
+
+func (s *PaymentService) Report(ctx context.Context, userID, concertID, itemID uuid.UUID) (gen.PaymentItem, error) {
+	_, item, err := s.loadItem(ctx, userID, concertID, itemID)
+	if err != nil {
+		return gen.PaymentItem{}, err
+	}
+	if item.UserID != userID {
+		return gen.PaymentItem{}, apperr.Forbidden("not_owner", "you can only report your own payment")
+	}
+	if item.Status != "open" {
+		return gen.PaymentItem{}, apperr.BadRequest("invalid_transition", "can only report an open item")
+	}
+	now := time.Now()
+	return s.q.UpdatePaymentItemStatus(ctx, gen.UpdatePaymentItemStatusParams{
+		ID: itemID, Status: "reported", ReportedAt: &now, ConfirmedAt: nil})
+}
+
+func (s *PaymentService) UnReport(ctx context.Context, userID, concertID, itemID uuid.UUID) (gen.PaymentItem, error) {
+	_, item, err := s.loadItem(ctx, userID, concertID, itemID)
+	if err != nil {
+		return gen.PaymentItem{}, err
+	}
+	if item.UserID != userID {
+		return gen.PaymentItem{}, apperr.Forbidden("not_owner", "you can only change your own payment")
+	}
+	if item.Status != "reported" {
+		return gen.PaymentItem{}, apperr.BadRequest("invalid_transition", "can only un-report a reported item")
+	}
+	return s.q.UpdatePaymentItemStatus(ctx, gen.UpdatePaymentItemStatusParams{
+		ID: itemID, Status: "open", ReportedAt: nil, ConfirmedAt: nil})
+}
+
+func (s *PaymentService) Confirm(ctx context.Context, userID, concertID, itemID uuid.UUID) (gen.PaymentItem, error) {
+	_, item, err := s.loadItemAsResponsible(ctx, userID, concertID, itemID)
+	if err != nil {
+		return gen.PaymentItem{}, err
+	}
+	if item.Status == "confirmed" {
+		return gen.PaymentItem{}, apperr.BadRequest("invalid_transition", "already confirmed")
+	}
+	now := time.Now()
+	return s.q.UpdatePaymentItemStatus(ctx, gen.UpdatePaymentItemStatusParams{
+		ID: itemID, Status: "confirmed", ReportedAt: item.ReportedAt, ConfirmedAt: &now})
+}
+
+func (s *PaymentService) UnConfirm(ctx context.Context, userID, concertID, itemID uuid.UUID) (gen.PaymentItem, error) {
+	_, item, err := s.loadItemAsResponsible(ctx, userID, concertID, itemID)
+	if err != nil {
+		return gen.PaymentItem{}, err
+	}
+	if item.Status != "confirmed" {
+		return gen.PaymentItem{}, apperr.BadRequest("invalid_transition", "item is not confirmed")
+	}
+	status := "open"
+	if item.ReportedAt != nil {
+		status = "reported"
+	}
+	return s.q.UpdatePaymentItemStatus(ctx, gen.UpdatePaymentItemStatusParams{
+		ID: itemID, Status: status, ReportedAt: item.ReportedAt, ConfirmedAt: nil})
 }

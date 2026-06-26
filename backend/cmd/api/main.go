@@ -51,6 +51,7 @@ func main() {
 	concerts := service.NewConcertService(q, groups)
 	rsvps := service.NewRSVPService(q, concerts)
 	payments := service.NewPaymentService(pool, q, concerts)
+	subs := service.NewSubscriptionService(q)
 
 	router := httpapi.NewRouter(httpapi.Deps{
 		Auth:     &httpapi.AuthHandlers{Users: users, Sessions: sessions, CookieSecure: cfg.CookieSecure},
@@ -58,6 +59,7 @@ func main() {
 		Concerts: &httpapi.ConcertHandlers{Concerts: concerts},
 		RSVPs:    &httpapi.RSVPHandlers{RSVPs: rsvps},
 		Payments: &httpapi.PaymentHandlers{Payments: payments},
+		Push:     &httpapi.PushHandlers{Subs: subs, VapidPublicKey: cfg.VapidPublicKey},
 		GroupSvc: groups,
 		Ready:    func(c context.Context) error { return pool.Ping(c) },
 	})

@@ -194,6 +194,17 @@ func (s *PaymentService) AddItem(ctx context.Context, userID, concertID, targetU
 	if amountCents != nil {
 		amount = *amountCents
 	}
+	if amount < 0 {
+		return gen.ListPaymentItemsRow{}, apperr.BadRequest("invalid_amount", "amount must be non-negative")
+	}
+	// The target must be a member of the concert's group (concerts.Get gates on
+	// the passed user's membership, so a non-member surfaces as 403/404 there).
+	if _, err := s.concerts.Get(ctx, targetUserID, concertID); err != nil {
+		if e, ok := apperr.As(err); ok && (e.HTTPStatus == 403 || e.HTTPStatus == 404) {
+			return gen.ListPaymentItemsRow{}, apperr.BadRequest("target_not_member", "user is not a member of this group")
+		}
+		return gen.ListPaymentItemsRow{}, err
+	}
 	if _, err := s.q.GetPaymentItemForUser(ctx, gen.GetPaymentItemForUserParams{CollectionID: col.ID, UserID: targetUserID}); err == nil {
 		return gen.ListPaymentItemsRow{}, apperr.Conflict("item_exists", "this person already has a payment item")
 	} else if !errors.Is(err, pgx.ErrNoRows) {

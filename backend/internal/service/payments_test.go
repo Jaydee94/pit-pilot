@@ -267,3 +267,31 @@ func TestDirectConfirmFromOpen(t *testing.T) {
 		t.Fatalf("unconfirm to open: %+v err=%v", uc, err)
 	}
 }
+
+func TestAddItemValidatesAmountAndMembership(t *testing.T) {
+	ps, gs, q, c, owner := paySetup(t)
+	ctx := context.Background()
+	member := seedUser(t, q, "member")
+	g, _ := q.GetGroup(ctx, c.GroupID)
+	_, _ = gs.Join(ctx, member.ID, g.InviteCode)
+	stranger := seedUser(t, q, "stranger") // deliberately NOT a group member
+	_, _ = ps.Activate(ctx, owner.ID, c.ID, 4500, nil)
+
+	// negative explicit amount is rejected (400)
+	neg := int32(-100)
+	if _, err := ps.AddItem(ctx, owner.ID, c.ID, member.ID, &neg); err == nil {
+		t.Fatal("expected error for negative amount")
+	} else if e, ok := apperr.As(err); !ok || e.HTTPStatus != 400 {
+		t.Fatalf("expected 400 for negative amount, got %v", err)
+	}
+	// adding a non-member target is rejected (400 target_not_member)
+	if _, err := ps.AddItem(ctx, owner.ID, c.ID, stranger.ID, nil); err == nil {
+		t.Fatal("expected error adding non-member")
+	} else if e, ok := apperr.As(err); !ok || e.HTTPStatus != 400 {
+		t.Fatalf("expected 400 for non-member target, got %v", err)
+	}
+	// adding a real member at the default amount still works
+	if _, err := ps.AddItem(ctx, owner.ID, c.ID, member.ID, nil); err != nil {
+		t.Fatalf("valid member add failed: %v", err)
+	}
+}

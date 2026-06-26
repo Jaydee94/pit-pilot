@@ -1,0 +1,4 @@
+# build artifacts not needed in the image build context
+/api
+*.test
+.git

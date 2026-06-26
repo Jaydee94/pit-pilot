@@ -40,6 +40,7 @@ Settled during brainstorming (these refine / upgrade the placeholder assumptions
 - **RSVP changes do not auto-touch payment items.** The responsible manages the list manually after seeding. (5b — no auto-sync logic)
 - **Seeding: pre-filled from Yes-RSVPs** at the default amount on activation; the responsible then adjusts. (6)
 - **Visibility: responsible + the affected person only.** Each member sees only their own item; the responsible sees the full named list plus a summary. No group-wide overview for non-responsible members. (Visibility option C)
+- **Payment link (PayPal etc.).** The responsible person can store an optional pay-me link (e.g. a PayPal.me URL) on the collection — set at activation or edited later. Every owing member sees it on their own item and can open it to transfer directly. Stored as a generic URL (not PayPal-specific in the model); the UI labels it "Per PayPal zahlen". Link scope is per-collection (a reusable profile-level link is a later cycle, as it would touch the Cycle 1 user profile).
 
 ---
 
@@ -68,6 +69,7 @@ payment_collections
   concert_id           uuid NOT NULL UNIQUE REFERENCES concerts(id) ON DELETE CASCADE  -- max 1 per concert = "tracking active?"
   responsible_user_id  uuid NOT NULL REFERENCES users(id)
   default_amount_cents int NOT NULL
+  payment_link         text NULL                          -- optional pay-me URL (e.g. PayPal.me), set by the responsible
   created_at           timestamptz NOT NULL DEFAULT now()
 
 payment_items
@@ -129,8 +131,9 @@ All under `/api/concerts/{concertID}/payments`; membership is gated via the conc
 
 | Method & path | Purpose | Auth |
 |---|---|---|
-| `POST /api/concerts/{concertID}/payments` | activate; body `{default_amount_cents}` → creator becomes responsible, items seeded from Yes-RSVPs; **409** if already active | member |
-| `GET /api/concerts/{concertID}/payments` | view (responsible: all items + summary; member: own item only); **404** if inactive | member |
+| `POST /api/concerts/{concertID}/payments` | activate; body `{default_amount_cents, payment_link?}` → creator becomes responsible, items seeded from Yes-RSVPs; **409** if already active | member |
+| `GET /api/concerts/{concertID}/payments` | view (responsible: all items + summary; member: own item only); both see `payment_link`; **404** if inactive | member |
+| `PATCH /api/concerts/{concertID}/payments` | set/clear the pay-me link; body `{payment_link}` (null clears) | responsible |
 | `DELETE /api/concerts/{concertID}/payments` | deactivate (collection + items removed) | responsible |
 | `POST /api/concerts/{concertID}/payments/items` | add item; body `{user_id, amount_cents?}` (default if omitted) | responsible |
 | `PATCH /api/concerts/{concertID}/payments/items/{itemID}` | set amount; body `{amount_cents}` | responsible |
@@ -141,7 +144,7 @@ All under `/api/concerts/{concertID}/payments`; membership is gated via the conc
 | `DELETE /api/concerts/{concertID}/payments/items/{itemID}/confirm` | un-confirm | responsible |
 
 - Errors use the existing JSON shape `{"error":{"code","message"}}` with status 400/403/404/409.
-- The `GET` response, for the responsible, includes a summary: `outstanding_cents`, `confirmed_cents`, and counts per status. For a plain member it includes only their own item (and the collection's existence), never others' data.
+- The `GET` response, for the responsible, includes a summary: `outstanding_cents`, `confirmed_cents`, and counts per status. For a plain member it includes only their own item (and the collection's existence), never others' data. Both responsible and member responses include the collection's `payment_link` (so a member can pay).
 
 ---
 
@@ -149,9 +152,9 @@ All under `/api/concerts/{concertID}/payments`; membership is gated via the conc
 
 A **payment section on the existing ConcertDetail screen**, rendered by role/state:
 
-- **Inactive:** a "Ich kümmere mich um die Tickets" button → a dialog for the default amount → activates.
-- **Active & I am responsible:** a management view — list of all items (name, amount, status), inline amount editing, add/remove people, confirm/un-confirm buttons, and a summary line ("X € ausstehend, Y/N bestätigt").
-- **Active & I have an item:** my own item only — amount, status, and a "bezahlt" / "zurücknehmen" button. No one else's data.
+- **Inactive:** a "Ich kümmere mich um die Tickets" button → a dialog for the default amount and an optional pay-me link (PayPal.me) → activates.
+- **Active & I am responsible:** a management view — list of all items (name, amount, status), inline amount editing, add/remove people, confirm/un-confirm buttons, a summary line ("X € ausstehend, Y/N bestätigt"), and an editable pay-me link field.
+- **Active & I have an item:** my own item only — amount, status, a "bezahlt" / "zurücknehmen" button, and — if the collection has a pay-me link — a "Per PayPal zahlen" button opening that link in a new tab. No one else's data.
 - **Active & I have no item:** a quiet "kein Posten für dich" note.
 
 Money is carried as integer cents in the API client and formatted as "€" in the UI. The client gains a `payments` area (typed helpers + types) reusing the Cycle 1 patterns (cookie auth, TanStack Query, query invalidation on mutations).

@@ -33,7 +33,7 @@ export default function Login() {
           refresh();
           nav("/groups");
         } catch (e: unknown) {
-          setErr((e as { message?: string })?.message ?? "Login fehlgeschlagen");
+          setErr(e instanceof Error ? e.message : "Login fehlgeschlagen");
         }
       },
     }).catch(() => setErr("Google-Login konnte nicht geladen werden"));

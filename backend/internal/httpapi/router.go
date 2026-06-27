@@ -42,6 +42,7 @@ func NewRouter(d Deps) http.Handler {
 	if d.Auth != nil {
 		r.Post("/auth/google", d.Auth.Login("google"))
 		r.Post("/auth/apple", d.Auth.Login("apple"))
+		r.Get("/auth/config", d.Auth.Config)
 	}
 
 	r.Route("/api", func(api chi.Router) {

@@ -89,3 +89,24 @@ func TestSessionMiddlewareRejectsMissingCookie(t *testing.T) {
 		t.Fatalf("expected 401, got %d", rec.Code)
 	}
 }
+
+func TestAuthConfigReturnsClientID(t *testing.T) {
+	h := &httpapi.AuthHandlers{GoogleClientID: "test-client-id.apps.googleusercontent.com"}
+	rec := httptest.NewRecorder()
+	h.Config(rec, httptest.NewRequest(http.MethodGet, "/auth/config", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "test-client-id.apps.googleusercontent.com") {
+		t.Fatalf("config: %d %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"google_client_id"`) {
+		t.Fatalf("missing field: %s", rec.Body.String())
+	}
+}
+
+func TestAuthConfigEmptyWhenUnset(t *testing.T) {
+	h := &httpapi.AuthHandlers{}
+	rec := httptest.NewRecorder()
+	h.Config(rec, httptest.NewRequest(http.MethodGet, "/auth/config", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"google_client_id":""`) {
+		t.Fatalf("expected empty client id, got %s", rec.Body.String())
+	}
+}

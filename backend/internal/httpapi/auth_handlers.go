@@ -15,6 +15,7 @@ type AuthHandlers struct {
 	Users        *service.UserService
 	Sessions     *auth.SessionManager
 	CookieSecure bool
+	GoogleClientID string
 }
 
 func (a *AuthHandlers) Login(provider string) http.HandlerFunc {
@@ -62,4 +63,8 @@ func (a *AuthHandlers) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{"id": id})
+}
+
+func (a *AuthHandlers) Config(w http.ResponseWriter, _ *http.Request) {
+	WriteJSON(w, http.StatusOK, map[string]string{"google_client_id": a.GoogleClientID})
 }

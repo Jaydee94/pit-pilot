@@ -89,6 +89,8 @@ export const unconfirmPayment = (concertId: string, itemId: string) =>
 
 export type PushSubscriptionJSON = { endpoint: string; keys: { p256dh: string; auth: string } };
 
+export const getAuthConfig = () => apiFetch<{ google_client_id: string }>("/auth/config");
+
 export const getVapidPublicKey = () => apiFetch<{ public_key: string }>("/api/push/vapid-public-key");
 export const savePushSubscription = (sub: PushSubscriptionJSON) =>
   apiFetch<{ id: string }>("/api/push/subscriptions", { method: "POST", body: JSON.stringify(sub) });

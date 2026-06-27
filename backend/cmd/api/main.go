@@ -14,8 +14,11 @@ import (
 	"github.com/jaydee94/pit-pilot/backend/internal/auth"
 	"github.com/jaydee94/pit-pilot/backend/internal/config"
 	"github.com/jaydee94/pit-pilot/backend/internal/httpapi"
+	"github.com/jaydee94/pit-pilot/backend/internal/notify"
+	"github.com/jaydee94/pit-pilot/backend/internal/push"
 	"github.com/jaydee94/pit-pilot/backend/internal/service"
 	"github.com/jaydee94/pit-pilot/backend/internal/store/gen"
+	"github.com/jaydee94/pit-pilot/backend/internal/worker"
 )
 
 func newInviteCode() string {
@@ -52,6 +55,16 @@ func main() {
 	rsvps := service.NewRSVPService(q, concerts)
 	payments := service.NewPaymentService(pool, q, concerts)
 	subs := service.NewSubscriptionService(q)
+
+	enq := notify.OutboxEnqueuer{}
+	concerts.SetEnqueuer(enq, pool)
+	rsvps.SetEnqueuer(enq, pool)
+	payments.SetEnqueuer(enq)
+
+	if cfg.VapidPrivateKey != "" {
+		pusher := push.NewWebPusher(cfg.VapidPublicKey, cfg.VapidPrivateKey, cfg.VapidSubject)
+		go worker.New(pool, q, pusher).Run(ctx, 60*time.Second)
+	}
 
 	router := httpapi.NewRouter(httpapi.Deps{
 		Auth:     &httpapi.AuthHandlers{Users: users, Sessions: sessions, CookieSecure: cfg.CookieSecure},

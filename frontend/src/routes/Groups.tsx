@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listGroups, createGroup, joinGroup } from "../api/client";
+import PushToggle from "../components/PushToggle";
 
 export default function Groups() {
   const qc = useQueryClient();
@@ -13,6 +14,7 @@ export default function Groups() {
   return (
     <main>
       <h1>Meine Gruppen</h1>
+      <PushToggle />
       <ul>{groups?.map((g) => <li key={g.id}><Link to={`/groups/${g.id}`}>{g.name}</Link></li>)}</ul>
       <form onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
         <input aria-label="Gruppenname" value={name} onChange={(e) => setName(e.target.value)} placeholder="Neue Gruppe" />

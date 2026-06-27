@@ -86,3 +86,11 @@ export const confirmPayment = (concertId: string, itemId: string) =>
   apiFetch<PaymentItem>(`${paymentsBase(concertId)}/items/${itemId}/confirm`, { method: "POST" });
 export const unconfirmPayment = (concertId: string, itemId: string) =>
   apiFetch<PaymentItem>(`${paymentsBase(concertId)}/items/${itemId}/confirm`, { method: "DELETE" });
+
+export type PushSubscriptionJSON = { endpoint: string; keys: { p256dh: string; auth: string } };
+
+export const getVapidPublicKey = () => apiFetch<{ public_key: string }>("/api/push/vapid-public-key");
+export const savePushSubscription = (sub: PushSubscriptionJSON) =>
+  apiFetch<{ id: string }>("/api/push/subscriptions", { method: "POST", body: JSON.stringify(sub) });
+export const deletePushSubscription = (endpoint: string) =>
+  apiFetch<void>("/api/push/subscriptions", { method: "DELETE", body: JSON.stringify({ endpoint }) });

@@ -14,8 +14,11 @@ import (
 	"github.com/jaydee94/pit-pilot/backend/internal/auth"
 	"github.com/jaydee94/pit-pilot/backend/internal/config"
 	"github.com/jaydee94/pit-pilot/backend/internal/httpapi"
+	"github.com/jaydee94/pit-pilot/backend/internal/notify"
+	"github.com/jaydee94/pit-pilot/backend/internal/push"
 	"github.com/jaydee94/pit-pilot/backend/internal/service"
 	"github.com/jaydee94/pit-pilot/backend/internal/store/gen"
+	"github.com/jaydee94/pit-pilot/backend/internal/worker"
 )
 
 func newInviteCode() string {
@@ -51,6 +54,17 @@ func main() {
 	concerts := service.NewConcertService(q, groups)
 	rsvps := service.NewRSVPService(q, concerts)
 	payments := service.NewPaymentService(pool, q, concerts)
+	subs := service.NewSubscriptionService(q)
+
+	enq := notify.OutboxEnqueuer{}
+	concerts.SetEnqueuer(enq, pool)
+	rsvps.SetEnqueuer(enq, pool)
+	payments.SetEnqueuer(enq)
+
+	if cfg.VapidPrivateKey != "" {
+		pusher := push.NewWebPusher(cfg.VapidPublicKey, cfg.VapidPrivateKey, cfg.VapidSubject)
+		go worker.New(pool, q, pusher).Run(ctx, 60*time.Second)
+	}
 
 	router := httpapi.NewRouter(httpapi.Deps{
 		Auth:     &httpapi.AuthHandlers{Users: users, Sessions: sessions, CookieSecure: cfg.CookieSecure},
@@ -58,6 +72,7 @@ func main() {
 		Concerts: &httpapi.ConcertHandlers{Concerts: concerts},
 		RSVPs:    &httpapi.RSVPHandlers{RSVPs: rsvps},
 		Payments: &httpapi.PaymentHandlers{Payments: payments},
+		Push:     &httpapi.PushHandlers{Subs: subs, VapidPublicKey: cfg.VapidPublicKey},
 		GroupSvc: groups,
 		Ready:    func(c context.Context) error { return pool.Ping(c) },
 	})

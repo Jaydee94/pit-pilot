@@ -9,6 +9,9 @@ type Config struct {
 	AppleClientID     string
 	Port              string
 	CookieSecure      bool
+	VapidPublicKey    string
+	VapidPrivateKey   string
+	VapidSubject      string
 }
 
 // Load builds Config from a getenv function. DATABASE_URL and
@@ -21,6 +24,9 @@ func Load(getenv func(string) string) (Config, error) {
 		AppleClientID:     getenv("APPLE_CLIENT_ID"),
 		Port:              getenv("PORT"),
 		CookieSecure:      getenv("COOKIE_SECURE") == "true",
+		VapidPublicKey:    getenv("VAPID_PUBLIC_KEY"),
+		VapidPrivateKey:   getenv("VAPID_PRIVATE_KEY"),
+		VapidSubject:      getenv("VAPID_SUBJECT"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")

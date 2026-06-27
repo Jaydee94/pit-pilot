@@ -40,6 +40,20 @@ type GroupMember struct {
 	JoinedAt time.Time `json:"joined_at"`
 }
 
+type Notification struct {
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	Type      string     `json:"type"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	Url       *string    `json:"url"`
+	DedupKey  *string    `json:"dedup_key"`
+	Status    string     `json:"status"`
+	Attempts  int32      `json:"attempts"`
+	CreatedAt time.Time  `json:"created_at"`
+	SentAt    *time.Time `json:"sent_at"`
+}
+
 type PaymentCollection struct {
 	ID                 uuid.UUID `json:"id"`
 	ConcertID          uuid.UUID `json:"concert_id"`
@@ -58,6 +72,15 @@ type PaymentItem struct {
 	ReportedAt   *time.Time `json:"reported_at"`
 	ConfirmedAt  *time.Time `json:"confirmed_at"`
 	CreatedAt    time.Time  `json:"created_at"`
+}
+
+type PushSubscription struct {
+	ID        uuid.UUID `json:"id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Endpoint  string    `json:"endpoint"`
+	P256dh    string    `json:"p256dh"`
+	Auth      string    `json:"auth"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Rsvp struct {

@@ -28,3 +28,20 @@ func TestLoadReadsValues(t *testing.T) {
 		t.Fatalf("defaults/bools wrong: %+v", cfg)
 	}
 }
+
+func TestLoadReadsVapid(t *testing.T) {
+	env := map[string]string{
+		"DATABASE_URL":        "postgres://localhost/pp",
+		"SESSION_SIGNING_KEY": "k",
+		"VAPID_PUBLIC_KEY":    "pub",
+		"VAPID_PRIVATE_KEY":   "priv",
+		"VAPID_SUBJECT":       "mailto:a@x.io",
+	}
+	cfg, err := Load(func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.VapidPublicKey != "pub" || cfg.VapidPrivateKey != "priv" || cfg.VapidSubject != "mailto:a@x.io" {
+		t.Fatalf("vapid not parsed: %+v", cfg)
+	}
+}

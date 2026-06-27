@@ -17,6 +17,7 @@ type Deps struct {
 	Concerts *ConcertHandlers
 	RSVPs    *RSVPHandlers
 	Payments *PaymentHandlers
+	Push     *PushHandlers
 	GroupSvc *service.GroupService
 	Ready    func(ctx context.Context) error
 }
@@ -103,6 +104,12 @@ func NewRouter(d Deps) http.Handler {
 				p.Post("/items/{itemID}/confirm", d.Payments.Confirm)
 				p.Delete("/items/{itemID}/confirm", d.Payments.UnConfirm)
 			})
+		}
+
+		if d.Push != nil {
+			api.Get("/push/vapid-public-key", d.Push.VapidKey)
+			api.Post("/push/subscriptions", d.Push.Subscribe)
+			api.Delete("/push/subscriptions", d.Push.Unsubscribe)
 		}
 	})
 

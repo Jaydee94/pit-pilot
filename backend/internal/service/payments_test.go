@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jaydee94/pit-pilot/backend/internal/apperr"
+	"github.com/jaydee94/pit-pilot/backend/internal/notify"
 	"github.com/jaydee94/pit-pilot/backend/internal/service"
 	"github.com/jaydee94/pit-pilot/backend/internal/store/gen"
 	"github.com/jaydee94/pit-pilot/backend/internal/testutil"
@@ -293,5 +294,60 @@ func TestAddItemValidatesAmountAndMembership(t *testing.T) {
 	// adding a real member at the default amount still works
 	if _, err := ps.AddItem(ctx, owner.ID, c.ID, member.ID, nil); err != nil {
 		t.Fatalf("valid member add failed: %v", err)
+	}
+}
+
+func TestPaymentEnqueuesOnConfirm(t *testing.T) {
+	ps, _, c, owner, friend, item := paySetupWithItem(t)
+	ctx := context.Background()
+	fake := &notify.FakeEnqueuer{}
+	ps.SetEnqueuer(fake)
+	if _, err := ps.Confirm(ctx, owner.ID, c.ID, item.ID); err != nil {
+		t.Fatalf("confirm: %v", err)
+	}
+	if len(fake.Rows) != 1 || fake.Rows[0].UserID != friend.ID || fake.Rows[0].Type != "payment" {
+		t.Fatalf("expected 1 payment notif to friend, got %+v", fake.Rows)
+	}
+}
+
+func TestPaymentEnqueuesOnAddItem(t *testing.T) {
+	ps, gs, q, c, owner := paySetup(t)
+	ctx := context.Background()
+	member := seedUser(t, q, "member")
+	g, _ := q.GetGroup(ctx, c.GroupID)
+	_, _ = gs.Join(ctx, member.ID, g.InviteCode)
+	_, _ = ps.Activate(ctx, owner.ID, c.ID, 4500, nil)
+	fake := &notify.FakeEnqueuer{}
+	ps.SetEnqueuer(fake)
+	if _, err := ps.AddItem(ctx, owner.ID, c.ID, member.ID, nil); err != nil {
+		t.Fatalf("add item: %v", err)
+	}
+	if len(fake.Rows) != 1 || fake.Rows[0].UserID != member.ID || fake.Rows[0].Type != "payment" {
+		t.Fatalf("expected 1 payment notif to member, got %+v", fake.Rows)
+	}
+}
+
+func TestPaymentEnqueuesOnActivate(t *testing.T) {
+	ps, gs, q, c, owner := paySetup(t)
+	ctx := context.Background()
+	member := seedUser(t, q, "member")
+	g, _ := q.GetGroup(ctx, c.GroupID)
+	_, _ = gs.Join(ctx, member.ID, g.InviteCode)
+	// both must be yes-RSVPs so Activate seeds an item (and a payment notif) for each
+	_, _ = q.UpsertRSVP(ctx, gen.UpsertRSVPParams{ConcertID: c.ID, UserID: owner.ID, Status: "yes"})
+	_, _ = q.UpsertRSVP(ctx, gen.UpsertRSVPParams{ConcertID: c.ID, UserID: member.ID, Status: "yes"})
+
+	fake := &notify.FakeEnqueuer{}
+	ps.SetEnqueuer(fake)
+	if _, err := ps.Activate(ctx, owner.ID, c.ID, 4500, nil); err != nil {
+		t.Fatalf("activate: %v", err)
+	}
+	if len(fake.Rows) != 2 {
+		t.Fatalf("expected 2 payment notifs (owner + member), got %d", len(fake.Rows))
+	}
+	for _, r := range fake.Rows {
+		if r.Type != "payment" {
+			t.Fatalf("expected payment type, got %q", r.Type)
+		}
 	}
 }

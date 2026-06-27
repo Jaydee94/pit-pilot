@@ -44,16 +44,20 @@ export default function PushToggle() {
   };
 
   const disable = async () => {
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
-    if (sub) { await deletePushSubscription(sub.endpoint); await sub.unsubscribe(); }
-    setStatus("Benachrichtigungen aus");
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) { await deletePushSubscription(sub.endpoint); await sub.unsubscribe(); }
+      setStatus("Benachrichtigungen aus");
+    } catch {
+      setStatus("Deaktivierung fehlgeschlagen");
+    }
   };
 
   return (
     <div>
       <button onClick={enable}>Benachrichtigungen aktivieren</button>
-      <button onClick={disable}>aus</button>
+      <button onClick={disable} aria-label="Benachrichtigungen deaktivieren">aus</button>
       {status && <span role="status">{status}</span>}
     </div>
   );

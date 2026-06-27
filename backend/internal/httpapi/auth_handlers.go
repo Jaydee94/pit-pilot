@@ -12,9 +12,9 @@ import (
 )
 
 type AuthHandlers struct {
-	Users        *service.UserService
-	Sessions     *auth.SessionManager
-	CookieSecure bool
+	Users          *service.UserService
+	Sessions       *auth.SessionManager
+	CookieSecure   bool
 	GoogleClientID string
 }
 

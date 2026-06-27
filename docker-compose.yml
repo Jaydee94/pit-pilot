@@ -1,0 +1,65 @@
+# Local development stack for pit-pilot.
+#   make up     -> build + start at http://localhost:8080
+#   make down   -> stop (keeps the db volume)
+#   make nuke   -> remove containers + volumes + locally built images
+# Copy .env.example to .env to supply real OAuth / VAPID values (optional).
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: pp
+      POSTGRES_USER: pp
+      POSTGRES_PASSWORD: pp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pp -d pp"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # One-shot: applies all migrations, then exits.
+  migrate:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/internal/store/migrations:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://pp:pp@db:5432/pp?sslmode=disable"
+      - "up"
+    restart: "no"
+
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://pp:pp@db:5432/pp?sslmode=disable
+      SESSION_SIGNING_KEY: ${SESSION_SIGNING_KEY:-dev-only-change-me}
+      COOKIE_SECURE: "false"
+      PORT: "8080"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:dev@example.com}
+
+  web:
+    build: ./frontend
+    depends_on:
+      - api
+    # Compose-specific nginx config adds the /api + /auth proxy so the whole
+    # app is served single-origin (the kustomize frontend/nginx.conf is untouched).
+    volumes:
+      - ./deploy/compose/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:

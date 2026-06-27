@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 )
@@ -13,11 +15,17 @@ type WebPusher struct {
 	publicKey  string
 	privateKey string
 	subject    string
+	client     *http.Client
 }
 
 // NewWebPusher returns a WebPusher configured with the given VAPID keys and subject.
 func NewWebPusher(publicKey, privateKey, subject string) *WebPusher {
-	return &WebPusher{publicKey: publicKey, privateKey: privateKey, subject: subject}
+	return &WebPusher{
+		publicKey:  publicKey,
+		privateKey: privateKey,
+		subject:    subject,
+		client:     &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
 // Send encrypts the payload as JSON and delivers it to the given subscription.
@@ -40,10 +48,11 @@ func (w *WebPusher) Send(ctx context.Context, sub Subscription, p Payload) (bool
 			Auth:   sub.Auth,
 		},
 	}, &webpush.Options{
+		HTTPClient:      w.client,
 		Subscriber:      w.subject,
 		VAPIDPublicKey:  w.publicKey,
 		VAPIDPrivateKey: w.privateKey,
-		TTL:             30,
+		TTL:             86400,
 	})
 	if err != nil {
 		return false, err

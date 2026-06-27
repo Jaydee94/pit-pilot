@@ -70,6 +70,12 @@ func (w *Worker) scan(ctx context.Context) error {
 	return tx.Commit(ctx)
 }
 
+// sendPending delivers all claimed-pending notifications within a single
+// transaction. Delivery is at-least-once: the status update (sent/failed) is
+// committed only after all sends in the batch complete. If the process crashes
+// or the commit fails after some messages have already been dispatched, those
+// rows remain in 'pending' and will be re-sent on the next tick. This
+// duplication is acceptable for push notifications.
 func (w *Worker) sendPending(ctx context.Context) error {
 	tx, err := w.pool.Begin(ctx)
 	if err != nil {
@@ -104,6 +110,11 @@ func (w *Worker) sendPending(ctx context.Context) error {
 				return err
 			}
 		} else {
+			// MarkNotificationFailed sets status = 'failed', which is TERMINAL in this
+			// MVP — failed rows are NOT requeued. The original design included retry
+			// under an attempts ceiling; that is a deliberate cut for now and can be
+			// added as a follow-up (e.g., re-enqueue rows with attempts < N after a
+			// back-off delay).
 			if err := qtx.MarkNotificationFailed(ctx, n.ID); err != nil {
 				return err
 			}

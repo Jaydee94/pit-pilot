@@ -2,10 +2,15 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jaydee94/pit-pilot/backend/internal/apperr"
 	"github.com/jaydee94/pit-pilot/backend/internal/auth"
+	"github.com/jaydee94/pit-pilot/backend/internal/password"
 	"github.com/jaydee94/pit-pilot/backend/internal/store/gen"
 )
 
@@ -41,4 +46,60 @@ func (s *UserService) LoginWithIDToken(ctx context.Context, provider, rawToken s
 		return gen.User{}, fmt.Errorf("upsert user: %w", err)
 	}
 	return user, nil
+}
+
+func (s *UserService) Register(ctx context.Context, email, pw, displayName string) (gen.User, error) {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return gen.User{}, apperr.BadRequest("invalid_email", "email required")
+	}
+	if len(pw) < 8 {
+		return gen.User{}, apperr.BadRequest("weak_password", "password must be at least 8 characters")
+	}
+	hash, err := password.Hash(pw)
+	if err != nil {
+		return gen.User{}, fmt.Errorf("hash password: %w", err)
+	}
+	user, err := s.q.CreatePasswordUser(ctx, gen.CreatePasswordUserParams{
+		Email: email, DisplayName: displayName, PasswordHash: &hash,
+	})
+	if err != nil {
+		if isUniqueViolation(err) {
+			return gen.User{}, apperr.Conflict("email_taken", "email already registered")
+		}
+		return gen.User{}, fmt.Errorf("create password user: %w", err)
+	}
+	return user, nil
+}
+
+func (s *UserService) LoginWithPassword(ctx context.Context, email, pw string) (gen.User, error) {
+	email = strings.TrimSpace(email)
+	user, err := s.q.GetPasswordUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return gen.User{}, apperr.Unauthorized("invalid_credentials", "invalid email or password")
+		}
+		return gen.User{}, fmt.Errorf("get password user: %w", err)
+	}
+	if user.PasswordHash == nil {
+		return gen.User{}, apperr.Unauthorized("invalid_credentials", "invalid email or password")
+	}
+	ok, err := password.Verify(pw, *user.PasswordHash)
+	if err != nil || !ok {
+		return gen.User{}, apperr.Unauthorized("invalid_credentials", "invalid email or password")
+	}
+	return user, nil
+}
+
+func (s *UserService) DevLogin(ctx context.Context, name string) (gen.User, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return gen.User{}, apperr.BadRequest("invalid_name", "name required")
+	}
+	return s.q.UpsertDummyUser(ctx, name)
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

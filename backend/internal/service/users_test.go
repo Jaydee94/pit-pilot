@@ -41,3 +41,52 @@ func TestLoginRejectsInvalidToken(t *testing.T) {
 		t.Fatalf("expected wrapped ErrInvalidToken, got %v", err)
 	}
 }
+
+func TestRegisterAndLoginWithPassword(t *testing.T) {
+	pool := testutil.NewPostgres(t)
+	svc := service.NewUserService(gen.New(pool), nil)
+	ctx := context.Background()
+
+	u, err := svc.Register(ctx, "user@example.com", "hunter2hunter", "User")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if u.Provider != "password" || u.DisplayName != "User" {
+		t.Fatalf("unexpected user: %+v", u)
+	}
+
+	// duplicate → Conflict
+	if _, err := svc.Register(ctx, "user@example.com", "another8x", "Dup"); err == nil {
+		t.Fatal("expected conflict on duplicate email")
+	}
+
+	// short password → BadRequest (no row created)
+	if _, err := svc.Register(ctx, "short@example.com", "x", "Short"); err == nil {
+		t.Fatal("expected error for short password")
+	}
+
+	got, err := svc.LoginWithPassword(ctx, "user@example.com", "hunter2hunter")
+	if err != nil || got.ID != u.ID {
+		t.Fatalf("login should succeed: %+v err=%v", got, err)
+	}
+	if _, err := svc.LoginWithPassword(ctx, "user@example.com", "wrongpass1"); err == nil {
+		t.Fatal("login with wrong password should fail")
+	}
+	if _, err := svc.LoginWithPassword(ctx, "nobody@example.com", "whatever1"); err == nil {
+		t.Fatal("login with unknown email should fail")
+	}
+}
+
+func TestDevLoginIsIdempotent(t *testing.T) {
+	pool := testutil.NewPostgres(t)
+	svc := service.NewUserService(gen.New(pool), nil)
+	ctx := context.Background()
+	a, err := svc.DevLogin(ctx, "Alice")
+	if err != nil || a.Provider != "dummy" {
+		t.Fatalf("dev login: %+v err=%v", a, err)
+	}
+	b, err := svc.DevLogin(ctx, "Alice")
+	if err != nil || b.ID != a.ID {
+		t.Fatalf("dev login not idempotent: %v vs %v", a.ID, b.ID)
+	}
+}

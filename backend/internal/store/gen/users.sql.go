@@ -11,8 +11,57 @@ import (
 	"github.com/google/uuid"
 )
 
+const createPasswordUser = `-- name: CreatePasswordUser :one
+INSERT INTO users (provider, provider_sub, email, display_name, password_hash)
+VALUES ('password', $1, $1, $2, $3)
+RETURNING id, provider, provider_sub, email, display_name, avatar_url, created_at, password_hash
+`
+
+type CreatePasswordUserParams struct {
+	Email        string  `json:"email"`
+	DisplayName  string  `json:"display_name"`
+	PasswordHash *string `json:"password_hash"`
+}
+
+func (q *Queries) CreatePasswordUser(ctx context.Context, arg CreatePasswordUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createPasswordUser, arg.Email, arg.DisplayName, arg.PasswordHash)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.ProviderSub,
+		&i.Email,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.PasswordHash,
+	)
+	return i, err
+}
+
+const getPasswordUserByEmail = `-- name: GetPasswordUserByEmail :one
+SELECT id, provider, provider_sub, email, display_name, avatar_url, created_at, password_hash FROM users
+WHERE provider = 'password' AND provider_sub = $1
+`
+
+func (q *Queries) GetPasswordUserByEmail(ctx context.Context, providerSub string) (User, error) {
+	row := q.db.QueryRow(ctx, getPasswordUserByEmail, providerSub)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.ProviderSub,
+		&i.Email,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.PasswordHash,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, provider, provider_sub, email, display_name, avatar_url, created_at FROM users WHERE id = $1
+SELECT id, provider, provider_sub, email, display_name, avatar_url, created_at, password_hash FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -26,6 +75,30 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.DisplayName,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.PasswordHash,
+	)
+	return i, err
+}
+
+const upsertDummyUser = `-- name: UpsertDummyUser :one
+INSERT INTO users (provider, provider_sub, email, display_name)
+VALUES ('dummy', $1, '', $1)
+ON CONFLICT (provider, provider_sub) DO UPDATE SET display_name = EXCLUDED.display_name
+RETURNING id, provider, provider_sub, email, display_name, avatar_url, created_at, password_hash
+`
+
+func (q *Queries) UpsertDummyUser(ctx context.Context, name string) (User, error) {
+	row := q.db.QueryRow(ctx, upsertDummyUser, name)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.ProviderSub,
+		&i.Email,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.PasswordHash,
 	)
 	return i, err
 }
@@ -38,7 +111,7 @@ ON CONFLICT (provider, provider_sub) DO UPDATE
     SET email = EXCLUDED.email,
         display_name = EXCLUDED.display_name,
         avatar_url = EXCLUDED.avatar_url
-RETURNING id, provider, provider_sub, email, display_name, avatar_url, created_at
+RETURNING id, provider, provider_sub, email, display_name, avatar_url, created_at, password_hash
 `
 
 type UpsertUserParams struct {
@@ -67,6 +140,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, e
 		&i.DisplayName,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.PasswordHash,
 	)
 	return i, err
 }

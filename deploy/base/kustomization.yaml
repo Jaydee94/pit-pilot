@@ -15,3 +15,5 @@ configMapGenerator:
       - migrations/0002_payments.down.sql
       - migrations/0003_notifications.up.sql
       - migrations/0003_notifications.down.sql
+      - migrations/0004_password_auth.up.sql
+      - migrations/0004_password_auth.down.sql

@@ -43,6 +43,7 @@ services:
       DATABASE_URL: postgres://pp:pp@db:5432/pp?sslmode=disable
       SESSION_SIGNING_KEY: ${SESSION_SIGNING_KEY:-dev-only-change-me}
       COOKIE_SECURE: "false"
+      ALLOW_DEV_LOGIN: "true"
       PORT: "8080"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}

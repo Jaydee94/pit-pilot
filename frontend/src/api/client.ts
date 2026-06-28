@@ -89,10 +89,29 @@ export const unconfirmPayment = (concertId: string, itemId: string) =>
 
 export type PushSubscriptionJSON = { endpoint: string; keys: { p256dh: string; auth: string } };
 
-export const getAuthConfig = () => apiFetch<{ google_client_id: string }>("/auth/config");
+export const getAuthConfig = () =>
+  apiFetch<{ google_client_id: string; allow_dev_login: boolean }>("/auth/config");
 
 export const getVapidPublicKey = () => apiFetch<{ public_key: string }>("/api/push/vapid-public-key");
 export const savePushSubscription = (sub: PushSubscriptionJSON) =>
   apiFetch<{ id: string }>("/api/push/subscriptions", { method: "POST", body: JSON.stringify(sub) });
 export const deletePushSubscription = (endpoint: string) =>
   apiFetch<void>("/api/push/subscriptions", { method: "DELETE", body: JSON.stringify({ endpoint }) });
+
+export const register = (email: string, password: string, displayName: string) =>
+  apiFetch<{ id: string; display_name: string; avatar_url: string | null }>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password, display_name: displayName }),
+  });
+
+export const passwordLogin = (email: string, password: string) =>
+  apiFetch<{ id: string; display_name: string; avatar_url: string | null }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+
+export const devLogin = (name: string) =>
+  apiFetch<{ id: string; display_name: string; avatar_url: string | null }>("/auth/dev-login", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });

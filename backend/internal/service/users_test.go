@@ -41,3 +41,92 @@ func TestLoginRejectsInvalidToken(t *testing.T) {
 		t.Fatalf("expected wrapped ErrInvalidToken, got %v", err)
 	}
 }
+
+func TestRegisterAndLoginWithPassword(t *testing.T) {
+	pool := testutil.NewPostgres(t)
+	svc := service.NewUserService(gen.New(pool), nil)
+	ctx := context.Background()
+
+	u, err := svc.Register(ctx, "user@example.com", "hunter2hunter", "User")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if u.Provider != "password" || u.DisplayName != "User" {
+		t.Fatalf("unexpected user: %+v", u)
+	}
+	if u.PasswordHash != nil {
+		t.Fatal("PasswordHash must be nil after Register")
+	}
+
+	// duplicate → Conflict 409
+	if _, err := svc.Register(ctx, "user@example.com", "another8x", "Dup"); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 409
+	}() {
+		t.Fatalf("expected 409 Conflict on duplicate email, got %v", err)
+	}
+
+	// short password → BadRequest 400 (no row created)
+	if _, err := svc.Register(ctx, "short@example.com", "x", "Short"); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 400
+	}() {
+		t.Fatalf("expected 400 BadRequest for short password, got %v", err)
+	}
+
+	got, err := svc.LoginWithPassword(ctx, "user@example.com", "hunter2hunter")
+	if err != nil || got.ID != u.ID {
+		t.Fatalf("login should succeed: %+v err=%v", got, err)
+	}
+	if got.PasswordHash != nil {
+		t.Fatal("PasswordHash must be nil after successful login")
+	}
+
+	// wrong password → Unauthorized 401
+	if _, err := svc.LoginWithPassword(ctx, "user@example.com", "wrongpass1"); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 401
+	}() {
+		t.Fatalf("expected 401 Unauthorized for wrong password, got %v", err)
+	}
+
+	// unknown email → Unauthorized 401
+	if _, err := svc.LoginWithPassword(ctx, "nobody@example.com", "whatever1"); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 401
+	}() {
+		t.Fatalf("expected 401 Unauthorized for unknown email, got %v", err)
+	}
+
+	// Fix 2: case-insensitive login — register with mixed-case, login with lowercase
+	uMixed, err := svc.Register(ctx, "Mixed@Example.com", "longenough8", "Mixed")
+	if err != nil {
+		t.Fatalf("register mixed-case: %v", err)
+	}
+	gotMixed, err := svc.LoginWithPassword(ctx, "mixed@example.com", "longenough8")
+	if err != nil || gotMixed.ID != uMixed.ID {
+		t.Fatalf("case-insensitive login should succeed: %+v err=%v", gotMixed, err)
+	}
+
+	// Fix 3: blank display name → BadRequest 400
+	if _, err := svc.Register(ctx, "x2@example.com", "longenough8", "   "); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 400
+	}() {
+		t.Fatalf("expected 400 BadRequest for blank display name, got %v", err)
+	}
+}
+
+func TestDevLoginIsIdempotent(t *testing.T) {
+	pool := testutil.NewPostgres(t)
+	svc := service.NewUserService(gen.New(pool), nil)
+	ctx := context.Background()
+	a, err := svc.DevLogin(ctx, "Alice")
+	if err != nil || a.Provider != "dummy" {
+		t.Fatalf("dev login: %+v err=%v", a, err)
+	}
+	b, err := svc.DevLogin(ctx, "Alice")
+	if err != nil || b.ID != a.ID {
+		t.Fatalf("dev login not idempotent: %v vs %v", a.ID, b.ID)
+	}
+}

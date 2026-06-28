@@ -91,11 +91,12 @@ type Rsvp struct {
 }
 
 type User struct {
-	ID          uuid.UUID `json:"id"`
-	Provider    string    `json:"provider"`
-	ProviderSub string    `json:"provider_sub"`
-	Email       string    `json:"email"`
-	DisplayName string    `json:"display_name"`
-	AvatarUrl   *string   `json:"avatar_url"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	Provider     string    `json:"provider"`
+	ProviderSub  string    `json:"provider_sub"`
+	Email        string    `json:"email"`
+	DisplayName  string    `json:"display_name"`
+	AvatarUrl    *string   `json:"avatar_url"`
+	CreatedAt    time.Time `json:"created_at"`
+	PasswordHash *string   `json:"password_hash"`
 }

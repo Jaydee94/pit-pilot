@@ -110,3 +110,22 @@ func TestAuthConfigEmptyWhenUnset(t *testing.T) {
 		t.Fatalf("expected empty client id, got %s", rec.Body.String())
 	}
 }
+
+func TestConfigIncludesAllowDevLogin(t *testing.T) {
+	h := &httpapi.AuthHandlers{GoogleClientID: "gid", AllowDevLogin: true}
+	rec := httptest.NewRecorder()
+	h.Config(rec, httptest.NewRequest(http.MethodGet, "/auth/config", nil))
+	if !strings.Contains(rec.Body.String(), `"allow_dev_login":true`) {
+		t.Fatalf("config missing allow_dev_login: %s", rec.Body.String())
+	}
+}
+
+func TestDevLoginDisabledReturns404(t *testing.T) {
+	h := &httpapi.AuthHandlers{AllowDevLogin: false}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/auth/dev-login", strings.NewReader(`{"name":"X"}`))
+	h.DevLogin(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 when dev login disabled, got %d", rec.Code)
+	}
+}

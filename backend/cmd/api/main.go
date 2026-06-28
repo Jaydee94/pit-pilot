@@ -67,7 +67,7 @@ func main() {
 	}
 
 	router := httpapi.NewRouter(httpapi.Deps{
-		Auth:     &httpapi.AuthHandlers{Users: users, Sessions: sessions, CookieSecure: cfg.CookieSecure, GoogleClientID: cfg.GoogleClientID},
+		Auth:     &httpapi.AuthHandlers{Users: users, Sessions: sessions, CookieSecure: cfg.CookieSecure, GoogleClientID: cfg.GoogleClientID, AllowDevLogin: cfg.AllowDevLogin},
 		Groups:   &httpapi.GroupHandlers{Groups: groups},
 		Concerts: &httpapi.ConcertHandlers{Concerts: concerts},
 		RSVPs:    &httpapi.RSVPHandlers{RSVPs: rsvps},

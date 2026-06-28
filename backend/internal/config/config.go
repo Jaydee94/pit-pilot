@@ -12,6 +12,7 @@ type Config struct {
 	VapidPublicKey    string
 	VapidPrivateKey   string
 	VapidSubject      string
+	AllowDevLogin     bool
 }
 
 // Load builds Config from a getenv function. DATABASE_URL and
@@ -27,6 +28,7 @@ func Load(getenv func(string) string) (Config, error) {
 		VapidPublicKey:    getenv("VAPID_PUBLIC_KEY"),
 		VapidPrivateKey:   getenv("VAPID_PRIVATE_KEY"),
 		VapidSubject:      getenv("VAPID_SUBJECT"),
+		AllowDevLogin:     getenv("ALLOW_DEV_LOGIN") == "true",
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")

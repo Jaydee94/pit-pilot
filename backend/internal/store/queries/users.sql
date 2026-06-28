@@ -11,3 +11,18 @@ RETURNING *;
 
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1;
+
+-- name: CreatePasswordUser :one
+INSERT INTO users (provider, provider_sub, email, display_name, password_hash)
+VALUES ('password', sqlc.arg(email), sqlc.arg(email), sqlc.arg(display_name), sqlc.arg(password_hash))
+RETURNING *;
+
+-- name: GetPasswordUserByEmail :one
+SELECT * FROM users
+WHERE provider = 'password' AND provider_sub = $1;
+
+-- name: UpsertDummyUser :one
+INSERT INTO users (provider, provider_sub, email, display_name)
+VALUES ('dummy', sqlc.arg(name), '', sqlc.arg(name))
+ON CONFLICT (provider, provider_sub) DO UPDATE SET display_name = EXCLUDED.display_name
+RETURNING *;

@@ -1,5 +1,5 @@
 // frontend/src/routes/Login.test.tsx
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
@@ -76,4 +76,59 @@ test("shows a not-configured note when the client id is empty", async () => {
   }));
   render(wrap());
   await waitFor(() => expect(screen.getByText(/nicht konfiguriert/i)).toBeInTheDocument());
+});
+
+test("password login posts to /auth/login", async () => {
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    if (u.endsWith("/auth/config")) return new Response(JSON.stringify({ google_client_id: "", allow_dev_login: false }), { status: 200 });
+    calls.push(u);
+    if (u.endsWith("/auth/login")) return new Response(JSON.stringify({ id: "u1", display_name: "U", avatar_url: null }), { status: 200 });
+    return new Response(JSON.stringify({ error: { code: "x", message: "x" } }), { status: 401 });
+  }));
+  render(wrap());
+  await screen.findByLabelText(/e-mail/i);
+  fireEvent.change(screen.getByLabelText(/e-mail/i), { target: { value: "a@b.de" } });
+  fireEvent.change(screen.getByLabelText(/passwort/i), { target: { value: "secret12" } });
+  fireEvent.click(screen.getByRole("button", { name: /einloggen/i }));
+  await waitFor(() => expect(calls.some((u) => u.endsWith("/auth/login"))).toBe(true));
+});
+
+test("dummy block only renders when allow_dev_login is true", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+    String(url).endsWith("/auth/config")
+      ? new Response(JSON.stringify({ google_client_id: "", allow_dev_login: true }), { status: 200 })
+      : new Response(JSON.stringify({ error: { code: "x", message: "x" } }), { status: 401 })));
+  render(wrap());
+  await waitFor(() => expect(screen.getByRole("button", { name: /dev-login/i })).toBeInTheDocument());
+});
+
+test("register path posts to /auth/register", async () => {
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    if (u.endsWith("/auth/config")) return new Response(JSON.stringify({ google_client_id: "", allow_dev_login: false }), { status: 200 });
+    calls.push(u);
+    if (u.endsWith("/auth/register")) return new Response(JSON.stringify({ id: "u1", display_name: "U", avatar_url: null }), { status: 200 });
+    return new Response(JSON.stringify({ error: { code: "x", message: "x" } }), { status: 401 });
+  }));
+  render(wrap());
+  await screen.findByLabelText(/e-mail/i);
+  fireEvent.click(screen.getByRole("button", { name: /^registrieren$/i }));
+  fireEvent.change(screen.getByLabelText(/anzeigename/i), { target: { value: "TestUser" } });
+  fireEvent.change(screen.getByLabelText(/e-mail/i), { target: { value: "a@b.de" } });
+  fireEvent.change(screen.getByLabelText(/passwort/i), { target: { value: "secret12" } });
+  fireEvent.click(screen.getByRole("button", { name: /konto erstellen/i }));
+  await waitFor(() => expect(calls.some((u) => u.endsWith("/auth/register"))).toBe(true));
+});
+
+test("dummy block absent when allow_dev_login is false", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+    String(url).endsWith("/auth/config")
+      ? new Response(JSON.stringify({ google_client_id: "", allow_dev_login: false }), { status: 200 })
+      : new Response(JSON.stringify({ error: { code: "x", message: "x" } }), { status: 401 })));
+  render(wrap());
+  await screen.findByLabelText(/e-mail/i);
+  expect(screen.queryByRole("button", { name: /dev-login/i })).toBeNull();
 });

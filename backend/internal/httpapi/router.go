@@ -43,6 +43,9 @@ func NewRouter(d Deps) http.Handler {
 		r.Post("/auth/google", d.Auth.Login("google"))
 		r.Post("/auth/apple", d.Auth.Login("apple"))
 		r.Get("/auth/config", d.Auth.Config)
+		r.Post("/auth/register", d.Auth.Register)
+		r.Post("/auth/login", d.Auth.PasswordLogin)
+		r.Post("/auth/dev-login", d.Auth.DevLogin)
 	}
 
 	r.Route("/api", func(api chi.Router) {

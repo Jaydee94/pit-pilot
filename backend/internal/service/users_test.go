@@ -54,26 +54,48 @@ func TestRegisterAndLoginWithPassword(t *testing.T) {
 	if u.Provider != "password" || u.DisplayName != "User" {
 		t.Fatalf("unexpected user: %+v", u)
 	}
-
-	// duplicate → Conflict
-	if _, err := svc.Register(ctx, "user@example.com", "another8x", "Dup"); err == nil {
-		t.Fatal("expected conflict on duplicate email")
+	if u.PasswordHash != nil {
+		t.Fatal("PasswordHash must be nil after Register")
 	}
 
-	// short password → BadRequest (no row created)
-	if _, err := svc.Register(ctx, "short@example.com", "x", "Short"); err == nil {
-		t.Fatal("expected error for short password")
+	// duplicate → Conflict 409
+	if _, err := svc.Register(ctx, "user@example.com", "another8x", "Dup"); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 409
+	}() {
+		t.Fatalf("expected 409 Conflict on duplicate email, got %v", err)
+	}
+
+	// short password → BadRequest 400 (no row created)
+	if _, err := svc.Register(ctx, "short@example.com", "x", "Short"); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 400
+	}() {
+		t.Fatalf("expected 400 BadRequest for short password, got %v", err)
 	}
 
 	got, err := svc.LoginWithPassword(ctx, "user@example.com", "hunter2hunter")
 	if err != nil || got.ID != u.ID {
 		t.Fatalf("login should succeed: %+v err=%v", got, err)
 	}
-	if _, err := svc.LoginWithPassword(ctx, "user@example.com", "wrongpass1"); err == nil {
-		t.Fatal("login with wrong password should fail")
+	if got.PasswordHash != nil {
+		t.Fatal("PasswordHash must be nil after successful login")
 	}
-	if _, err := svc.LoginWithPassword(ctx, "nobody@example.com", "whatever1"); err == nil {
-		t.Fatal("login with unknown email should fail")
+
+	// wrong password → Unauthorized 401
+	if _, err := svc.LoginWithPassword(ctx, "user@example.com", "wrongpass1"); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 401
+	}() {
+		t.Fatalf("expected 401 Unauthorized for wrong password, got %v", err)
+	}
+
+	// unknown email → Unauthorized 401
+	if _, err := svc.LoginWithPassword(ctx, "nobody@example.com", "whatever1"); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 401
+	}() {
+		t.Fatalf("expected 401 Unauthorized for unknown email, got %v", err)
 	}
 }
 

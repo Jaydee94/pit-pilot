@@ -50,6 +50,7 @@ func (s *UserService) LoginWithIDToken(ctx context.Context, provider, rawToken s
 
 func (s *UserService) Register(ctx context.Context, email, pw, displayName string) (gen.User, error) {
 	email = strings.TrimSpace(email)
+	displayName = strings.TrimSpace(displayName)
 	if email == "" {
 		return gen.User{}, apperr.BadRequest("invalid_email", "email required")
 	}
@@ -69,6 +70,7 @@ func (s *UserService) Register(ctx context.Context, email, pw, displayName strin
 		}
 		return gen.User{}, fmt.Errorf("create password user: %w", err)
 	}
+	user.PasswordHash = nil
 	return user, nil
 }
 
@@ -88,6 +90,7 @@ func (s *UserService) LoginWithPassword(ctx context.Context, email, pw string) (
 	if err != nil || !ok {
 		return gen.User{}, apperr.Unauthorized("invalid_credentials", "invalid email or password")
 	}
+	user.PasswordHash = nil
 	return user, nil
 }
 

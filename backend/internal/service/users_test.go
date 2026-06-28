@@ -97,6 +97,24 @@ func TestRegisterAndLoginWithPassword(t *testing.T) {
 	}() {
 		t.Fatalf("expected 401 Unauthorized for unknown email, got %v", err)
 	}
+
+	// Fix 2: case-insensitive login — register with mixed-case, login with lowercase
+	uMixed, err := svc.Register(ctx, "Mixed@Example.com", "longenough8", "Mixed")
+	if err != nil {
+		t.Fatalf("register mixed-case: %v", err)
+	}
+	gotMixed, err := svc.LoginWithPassword(ctx, "mixed@example.com", "longenough8")
+	if err != nil || gotMixed.ID != uMixed.ID {
+		t.Fatalf("case-insensitive login should succeed: %+v err=%v", gotMixed, err)
+	}
+
+	// Fix 3: blank display name → BadRequest 400
+	if _, err := svc.Register(ctx, "x2@example.com", "longenough8", "   "); func() bool {
+		appErr, ok := apperr.As(err)
+		return !ok || appErr.HTTPStatus != 400
+	}() {
+		t.Fatalf("expected 400 BadRequest for blank display name, got %v", err)
+	}
 }
 
 func TestDevLoginIsIdempotent(t *testing.T) {

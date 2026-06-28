@@ -14,6 +14,10 @@ import (
 	"github.com/jaydee94/pit-pilot/backend/internal/store/gen"
 )
 
+// decoyHash equalizes LoginWithPassword timing between existing and
+// non-existing accounts (defends against timing-based user enumeration).
+var decoyHash, _ = password.Hash("pit-pilot-login-timing-decoy")
+
 type UserService struct {
 	q *gen.Queries
 	v auth.IDTokenVerifier
@@ -49,13 +53,16 @@ func (s *UserService) LoginWithIDToken(ctx context.Context, provider, rawToken s
 }
 
 func (s *UserService) Register(ctx context.Context, email, pw, displayName string) (gen.User, error) {
-	email = strings.TrimSpace(email)
+	email = strings.ToLower(strings.TrimSpace(email))
 	displayName = strings.TrimSpace(displayName)
 	if email == "" {
 		return gen.User{}, apperr.BadRequest("invalid_email", "email required")
 	}
 	if len(pw) < 8 {
 		return gen.User{}, apperr.BadRequest("weak_password", "password must be at least 8 characters")
+	}
+	if displayName == "" {
+		return gen.User{}, apperr.BadRequest("invalid_display_name", "display name required")
 	}
 	hash, err := password.Hash(pw)
 	if err != nil {
@@ -75,15 +82,17 @@ func (s *UserService) Register(ctx context.Context, email, pw, displayName strin
 }
 
 func (s *UserService) LoginWithPassword(ctx context.Context, email, pw string) (gen.User, error) {
-	email = strings.TrimSpace(email)
+	email = strings.ToLower(strings.TrimSpace(email))
 	user, err := s.q.GetPasswordUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			_, _ = password.Verify(pw, decoyHash)
 			return gen.User{}, apperr.Unauthorized("invalid_credentials", "invalid email or password")
 		}
 		return gen.User{}, fmt.Errorf("get password user: %w", err)
 	}
 	if user.PasswordHash == nil {
+		_, _ = password.Verify(pw, decoyHash)
 		return gen.User{}, apperr.Unauthorized("invalid_credentials", "invalid email or password")
 	}
 	ok, err := password.Verify(pw, *user.PasswordHash)

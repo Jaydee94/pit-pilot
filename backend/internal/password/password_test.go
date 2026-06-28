@@ -22,10 +22,23 @@ func TestHashVerifyRoundtrip(t *testing.T) {
 }
 
 func TestHashIsSalted(t *testing.T) {
-	a, _ := password.Hash("samepw12")
-	b, _ := password.Hash("samepw12")
+	a, err := password.Hash("samepw12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := password.Hash("samepw12")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if a == b {
 		t.Fatal("two hashes of the same password must differ (random salt)")
+	}
+}
+
+func TestVerifyRejectsLeadingGarbage(t *testing.T) {
+	h, _ := password.Hash("pw123456")
+	if ok, err := password.Verify("pw123456", "x"+h); ok || err == nil {
+		t.Fatalf("expected rejection of leading-garbage hash, got ok=%v err=%v", ok, err)
 	}
 }
 

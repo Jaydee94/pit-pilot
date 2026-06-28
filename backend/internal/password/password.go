@@ -35,7 +35,7 @@ func Hash(plain string) (string, error) {
 // Verify reports whether plain matches the PHC-format argon2id encoded string.
 func Verify(plain, encoded string) (bool, error) {
 	parts := strings.Split(encoded, "$")
-	if len(parts) != 6 || parts[1] != "argon2id" {
+	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" {
 		return false, errors.New("invalid argon2id hash")
 	}
 	var version int
